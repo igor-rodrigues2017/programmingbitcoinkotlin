@@ -27,8 +27,8 @@ private fun multiplyPointAndCoef(
     coef: BigInteger
 ): PointFieldElement {
     var coef1 = coef
-    var current = point
-    var result = point.POINT_AT_INFINITY
+    var current = if (point is S256Point) point else point
+    var result = if (point is S256Point) point.POINT_AT_INFINITY else point.POINT_AT_INFINITY
     while (coef1 != BigInteger.ZERO) {
         if (isRightMostBitIs1(coef1)) result += current
         current += current

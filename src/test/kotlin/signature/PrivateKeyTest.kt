@@ -25,8 +25,8 @@ class PrivateKeyTest : StringSpec({
 
     "should create deterministic sign" {
         privateKey.sign(correctedMessage) shouldBe Signature(
-            r = "3b8293530687fe7b47ea6f824431261f45bdc0e92bc865a2d4006ff599339af8".toBigInteger(16),
-            s = "301c56693fc4b3043e06445697a77aecec175667a4b91b4d53ff5e78bcdb31fc".toBigInteger(16)
+            r = "4b0d525a4e225ac5dbb2796a9e23c78a011934a844da9cc0ebe34e94ec2d7fbb".toBigInteger(16),
+            s = "7991ee368872acf4dc18f9a212a8069d7e62e21d461eadf843b84fecb652d880".toBigInteger(16)
         )
     }
 })

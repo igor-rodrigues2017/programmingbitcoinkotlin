@@ -14,6 +14,7 @@ repositories {
 
 dependencies {
     implementation("com.google.guava:guava:31.1-jre")
+    implementation("org.bouncycastle:bcprov-jdk15on:1.69")
 
     testImplementation(kotlin("test"))
     testImplementation("io.kotest:kotest-runner-junit5-jvm:4.6.0")

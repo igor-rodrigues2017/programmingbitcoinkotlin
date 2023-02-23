@@ -1,5 +1,7 @@
 package ellipticcurve
 
+import extension.encodeBase58CheckSum
+import extension.hash160
 import extension.numberToHex
 import finitefield.FieldElement
 import java.math.BigInteger
@@ -27,6 +29,16 @@ open class PointFieldElement(
 
     private fun pointIsNotOnTheCurve(y: FieldElement, x: FieldElement) = y.pow(2) != x.pow(3) + (a * x) + b
 
+    private val testNetPrefix = byteArrayOf(0x6f.toByte())
+    private val mainNetPrefix = byteArrayOf(0x00.toByte())
+    fun address(compressed: Boolean = true, testNet: Boolean = false) =
+        if (testNet) (testNetPrefix + hash160(sec(compressed))).encodeBase58CheckSum()
+        else (mainNetPrefix + hash160(sec(compressed))).encodeBase58CheckSum()
+
+    operator fun times(other: BigInteger): PointFieldElement {
+        return other * this
+    }
+
     operator fun plus(other: PointFieldElement): PointFieldElement {
         validateIfPointsIsOnSameCurve(other)
         return when {
@@ -46,7 +58,7 @@ open class PointFieldElement(
             throw UnsupportedOperationException("$this and $other are not on the same curve")
     }
 
-    val POINT_AT_INFINITY: PointFieldElement by lazy {
+    open val POINT_AT_INFINITY: PointFieldElement by lazy {
         getPointAtInfinity()
     }
 
@@ -99,9 +111,19 @@ open class PointFieldElement(
 
     private fun calculateYCoordinate(s: FieldElement, calculatedX: FieldElement) = s * (x!! - calculatedX) - y!!
 
-    operator fun times(other: BigInteger): PointFieldElement {
-        return other * this
-    }
+    fun sec(compressed: Boolean = true): ByteArray = if (compressed) compressedSec() else uncompressedSec()
+
+    private fun uncompressedSec() =
+        byteArrayOf(0x04) + fix32Bytes(x!!.number.toByteArray()) + fix32Bytes(y!!.number.toByteArray())
+
+    private fun compressedSec() = if (yIsEven())
+        byteArrayOf(0x02) + fix32Bytes(x!!.number.toByteArray())
+    else
+        byteArrayOf(0x03) + fix32Bytes(x!!.number.toByteArray())
+
+    private fun yIsEven() = y!!.number.mod(2.toBigInteger()) == ZERO
+
+    private fun fix32Bytes(xBytes: ByteArray) = if (xBytes.size > 32) xBytes.copyOfRange(1, 33) else xBytes.copyOf(32)
 
     override fun toString() =
         if (this.x == null) "Point(infinity)"
@@ -114,10 +136,11 @@ open class PointFieldElement(
     override fun equals(other: Any?): Boolean {
         return when (other) {
             is PointFieldElement ->
-                        this.x == other.x &&
+                this.x == other.x &&
                         this.y == other.y &&
                         this.a == other.a &&
                         this.b == other.b
+
             else -> false
         }
     }

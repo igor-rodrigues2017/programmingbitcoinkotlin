@@ -54,6 +54,7 @@ open class FieldElement(
 
     private fun divide(other: FieldElement) = (number * other.number.invertFermatTheorem(prime)).mod(prime)
 
+    fun sqrt() = this.pow((prime + 1.toBigInteger()) / 4.toBigInteger())
     override fun equals(other: Any?): Boolean {
         return when(other) {
             is FieldElement -> this.number == other.number && this.prime == other.prime

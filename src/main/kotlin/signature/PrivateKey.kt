@@ -2,17 +2,18 @@ package signature
 
 import ellipticcurve.G
 import ellipticcurve.N
-import extension.hash256
+import extension.hash256InBigInteger
 import extension.invertFermatTheorem
 import extension.times
 import java.math.BigInteger
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-class PrivateKey(
-    private val secret: String
-) {
-    private val e = hash256InBigInteger(secret)
+
+class PrivateKey(private val e: BigInteger) {
+
+    constructor(secret: String) : this(hash256InBigInteger(secret))
+
     val publicKey = e * G
 
     override fun toString() = e.toString(16).padStart(64, '0')
@@ -24,8 +25,6 @@ class PrivateKey(
         val s = ((z + r * e) * k.invertFermatTheorem()).mod(N)
         return if (mostBiggerThanN(s)) Signature(r, s = N - s) else Signature(r, s)
     }
-
-    private fun hash256InBigInteger(message: String) = BigInteger(1, hash256(message.toByteArray()))
 
     /**
      * It turns out that using the low-s value will get nodes to relay our transactions.
@@ -45,7 +44,7 @@ class PrivateKey(
         if (z > N) zVal -= N
         var zBytes = zVal.toByteArray()
         if (zBytes.size < 32) zBytes = ByteArray(32 - zBytes.size) + zBytes
-        var secretBytes = secret.toByteArray()
+        var secretBytes = e.toByteArray()
         if (secretBytes.size < 32) secretBytes = ByteArray(32 - secretBytes.size) + secretBytes
         k = hmac(k, v + byteArrayOf(0x00.toByte()) + secretBytes + zBytes)
         v = hmac(k, v)
