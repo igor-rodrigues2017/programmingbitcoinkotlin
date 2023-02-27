@@ -2,9 +2,7 @@ package signature
 
 import ellipticcurve.G
 import ellipticcurve.N
-import extension.hash256InBigInteger
-import extension.invertFermatTheorem
-import extension.times
+import extension.*
 import java.math.BigInteger
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -64,4 +62,13 @@ class PrivateKey(private val e: BigInteger) {
         hmac.init(SecretKeySpec(key, "HmacSHA256"))
         return hmac.doFinal(data)
     }
+
+    fun wif(
+        compressed: Boolean = true,
+        testNet: Boolean = false
+    ) = (wifPrefix(testNet) + e.to32ByteArray() + wifSuffix(compressed)).encodeBase58CheckSum()
+
+    private fun wifPrefix(testNet: Boolean) = if (testNet) byteArrayOf(0xef.toByte()) else byteArrayOf(0x80.toByte())
+
+    private fun wifSuffix(compressed: Boolean) = if (compressed) byteArrayOf(0x01.toByte()) else byteArrayOf()
 }

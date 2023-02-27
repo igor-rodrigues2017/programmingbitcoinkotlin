@@ -2,6 +2,7 @@ package extension
 
 import com.google.common.hash.Hashing
 import org.bouncycastle.jce.provider.BouncyCastleProvider
+import org.bouncycastle.util.BigIntegers
 import java.math.BigInteger
 import java.security.MessageDigest
 import java.security.Security
@@ -17,4 +18,4 @@ private fun ripemd160(input: ByteArray): ByteArray {
     return MessageDigest.getInstance("RIPEMD160", "BC").digest(input)
 }
 
-fun hash256InBigInteger(message: String) = BigInteger(1, hash256(message.toByteArray()))
+fun hash256InBigInteger(message: String): BigInteger = BigIntegers.fromUnsignedByteArray(hash256(message.toByteArray()))

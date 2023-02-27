@@ -1,13 +1,11 @@
 package ellipticcurve
 
-import extension.encodeBase58CheckSum
-import extension.hash160
-import extension.numberToHex
+import extension.times
+import extension.toHex64
 import finitefield.FieldElement
 import java.math.BigInteger
-import extension.times
 import java.math.BigInteger.ZERO
-import java.util.InvalidPropertiesFormatException
+import java.util.*
 
 /**
  * Represent a Point in elliptic curve
@@ -29,11 +27,11 @@ open class PointFieldElement(
 
     private fun pointIsNotOnTheCurve(y: FieldElement, x: FieldElement) = y.pow(2) != x.pow(3) + (a * x) + b
 
-    private val testNetPrefix = byteArrayOf(0x6f.toByte())
-    private val mainNetPrefix = byteArrayOf(0x00.toByte())
-    fun address(compressed: Boolean = true, testNet: Boolean = false) =
-        if (testNet) (testNetPrefix + hash160(sec(compressed))).encodeBase58CheckSum()
-        else (mainNetPrefix + hash160(sec(compressed))).encodeBase58CheckSum()
+    open val POINT_AT_INFINITY: PointFieldElement by lazy {
+        getPointAtInfinity()
+    }
+
+    private fun getPointAtInfinity() = PointFieldElement(null, null, a, b)
 
     operator fun times(other: BigInteger): PointFieldElement {
         return other * this
@@ -51,18 +49,12 @@ open class PointFieldElement(
         }
     }
 
-    private fun isTangentLineIsVertical(other: PointFieldElement) = this == other && y!!.number == ZERO
-
     private fun validateIfPointsIsOnSameCurve(other: PointFieldElement) {
         if (a != other.a || b != other.b)
             throw UnsupportedOperationException("$this and $other are not on the same curve")
     }
 
-    open val POINT_AT_INFINITY: PointFieldElement by lazy {
-        getPointAtInfinity()
-    }
-
-    private fun getPointAtInfinity() = PointFieldElement(null, null, a, b)
+    private fun isTangentLineIsVertical(other: PointFieldElement) = this == other && y!!.number == ZERO
 
     private fun isAdditiveInverses(other: PointFieldElement) = x == other.x && y != other.y
 
@@ -111,27 +103,13 @@ open class PointFieldElement(
 
     private fun calculateYCoordinate(s: FieldElement, calculatedX: FieldElement) = s * (x!! - calculatedX) - y!!
 
-    fun sec(compressed: Boolean = true): ByteArray = if (compressed) compressedSec() else uncompressedSec()
-
-    private fun uncompressedSec() =
-        byteArrayOf(0x04) + fix32Bytes(x!!.number.toByteArray()) + fix32Bytes(y!!.number.toByteArray())
-
-    private fun compressedSec() = if (yIsEven())
-        byteArrayOf(0x02) + fix32Bytes(x!!.number.toByteArray())
-    else
-        byteArrayOf(0x03) + fix32Bytes(x!!.number.toByteArray())
-
-    private fun yIsEven() = y!!.number.mod(2.toBigInteger()) == ZERO
-
-    private fun fix32Bytes(xBytes: ByteArray) = if (xBytes.size > 32) xBytes.copyOfRange(1, 33) else xBytes.copyOf(32)
-
     override fun toString() =
         if (this.x == null) "Point(infinity)"
-        else "Point(${numberToHex(x.number)}," +
-                " ${numberToHex(y?.number)})_" +
-                "${numberToHex(a.number)}_" +
-                "${this.b.number.toString(16).padStart(64, '0')} " +
-                "FieldElement(${b.prime.toString(16).padStart(64, '0')})"
+        else "Point(${x.number.toHex64()}," +
+                " ${y?.number?.toHex64()})_" +
+                "${a.number.toHex64()}_" +
+                "${this.b.number.toHex64()} " +
+                "FieldElement(${b.prime.toHex64()})"
 
     override fun equals(other: Any?): Boolean {
         return when (other) {

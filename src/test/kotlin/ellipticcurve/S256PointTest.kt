@@ -25,7 +25,7 @@ class S256PointTest : StringSpec({
         }
     }
 
-    "should convert the point to uncompressed SEC format" {
+    "should convert the point to uncompressed Standards for Efficient Cryptography (SEC) format" {
         forAll(
             row(
                 PrivateKey(5000.toBigInteger()),
@@ -47,7 +47,7 @@ class S256PointTest : StringSpec({
         }
     }
 
-    "should convert the point to compressed SEC format" {
+    "should convert the point to compressed Standards for Efficient Cryptography (SEC) format" {
         forAll(
             row(
                 PrivateKey(5001.toBigInteger()),
@@ -66,7 +66,7 @@ class S256PointTest : StringSpec({
         }
     }
 
-    "should parse an uncompressed and compressed SEC format to a point" {
+    "should parse an uncompressed and compressed Standards for Efficient Cryptography (SEC) format to a point" {
         forAll(
             row(
                 ("${uncompressedPrefix}ffe558e388852f0120e46af2d1b370f85854a8eb0841811ece0e3e03d282d57c" +

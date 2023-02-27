@@ -1,9 +1,12 @@
 package ellipticcurve
 
+import extension.encodeBase58CheckSum
+import extension.hash160
 import extension.times
+import extension.to32ByteArray
 import finitefield.FieldElement
-import finitefield.S256Field
 import finitefield.PRIMES256
+import finitefield.S256Field
 import signature.Signature
 import java.math.BigInteger
 
@@ -27,6 +30,13 @@ class S256Point(
     constructor(x: BigInteger, y: BigInteger) : this(S256Field(x), S256Field(y))
 
     companion object {
+
+        private val TEST_NET_PREFIX = byteArrayOf(0x6f.toByte())
+        private val MAIN_NET_PREFIX = byteArrayOf(0x00.toByte())
+        private val UNCOMPRESSED_SEC_PREFIX = byteArrayOf(0x04)
+        private val COMPRESSED_SEC_EVEN_PREFIX = byteArrayOf(0x02)
+        private val COMPRESSED_SEC_ODD_PREFIX = byteArrayOf(0x03)
+
         /**
          * equation y² = x³ + 7
          */
@@ -46,20 +56,24 @@ class S256Point(
             }
         }
 
-        private fun isUncompressed(secBin: ByteArray) = secBin[0] == 4.toByte()
+        private fun isUncompressed(secBin: ByteArray) = secBin[0] == UNCOMPRESSED_SEC_PREFIX.component1()
 
         private fun calculateRightSideOfEquation(x: S256Field) = x.pow(3) + S256Field(B)
 
-        private fun determineEvenness(beta: FieldElement) = if (isEven(beta)) {
-            Pair(beta, S256Field(PRIMES256 - beta.number))
+        private fun determineEvenness(y: FieldElement) = if (isEven(y)) {
+            Pair(y, S256Field(PRIMES256 - y.number))
         } else {
-            Pair(S256Field(PRIMES256 - beta.number), beta)
+            Pair(S256Field(PRIMES256 - y.number), y)
         }
 
         private fun isEven(beta: FieldElement) = beta.number % 2.toBigInteger() == 0.toBigInteger()
 
         private fun yIsEven(secBin: ByteArray) = secBin[0] == 2.toByte()
     }
+
+    fun address(compressed: Boolean = true, testNet: Boolean = false) =
+        if (testNet) (TEST_NET_PREFIX + hash160(sec(compressed))).encodeBase58CheckSum()
+        else (MAIN_NET_PREFIX + hash160(sec(compressed))).encodeBase58CheckSum()
 
     /**
      * u = z/s
@@ -74,9 +88,22 @@ class S256Point(
         return pointR.x?.number == signature.r
     }
 
+    private fun invertSFermatTheorem(bigInteger: BigInteger): BigInteger =
+        bigInteger.modPow(N - 2.toBigInteger(), N)
+
     private fun divide(hash: BigInteger, sInv: BigInteger): BigInteger =
         (hash * sInv).mod(N)
 
-    private fun invertSFermatTheorem(bigInteger: BigInteger): BigInteger =
-        bigInteger.modPow(N - 2.toBigInteger(), N)
+    fun sec(compressed: Boolean = true): ByteArray = if (compressed) compressedSec() else uncompressedSec()
+
+    private fun uncompressedSec(): ByteArray {
+        return UNCOMPRESSED_SEC_PREFIX + x!!.number.to32ByteArray() + y!!.number.to32ByteArray()
+    }
+
+    private fun compressedSec() = if (yIsEven()) {
+        COMPRESSED_SEC_EVEN_PREFIX + x!!.number.to32ByteArray()
+    } else
+        COMPRESSED_SEC_ODD_PREFIX + x!!.number.to32ByteArray()
+
+    private fun yIsEven() = y!!.number.mod(2.toBigInteger()) == BigInteger.ZERO
 }

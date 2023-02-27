@@ -3,16 +3,18 @@ package extension
 import ellipticcurve.N
 import ellipticcurve.PointFieldElement
 import ellipticcurve.S256Point
+import org.bouncycastle.util.BigIntegers
 import java.math.BigInteger
 
 operator fun BigInteger.times(point: PointFieldElement): PointFieldElement {
-    val coef = this
-    return multiplyPointAndCoef(point, coef)
+    val coefficient = this
+    return multiplyPointAndCoef(point, coefficient)
 }
 
-operator fun BigInteger.times(point: S256Point): PointFieldElement {
-    val coef = this.mod(N)
-    return multiplyPointAndCoef(point, coef)
+operator fun BigInteger.times(point: S256Point): S256Point {
+    val coefficient = this.mod(N)
+    val pointFieldElement = multiplyPointAndCoef(point, coefficient)
+    return S256Point(pointFieldElement.x, pointFieldElement.y)
 }
 
 /**
@@ -27,8 +29,8 @@ private fun multiplyPointAndCoef(
     coef: BigInteger
 ): PointFieldElement {
     var coef1 = coef
-    var current = if (point is S256Point) point else point
-    var result = if (point is S256Point) point.POINT_AT_INFINITY else point.POINT_AT_INFINITY
+    var current = point
+    var result = point.POINT_AT_INFINITY
     while (coef1 != BigInteger.ZERO) {
         if (isRightMostBitIs1(coef1)) result += current
         current += current
@@ -39,4 +41,8 @@ private fun multiplyPointAndCoef(
 
 private fun isRightMostBitIs1(coef: BigInteger) = (coef and 1.toBigInteger()) == 1.toBigInteger()
 
-fun numberToHex(bigInteger: BigInteger?) = bigInteger?.toString(16)?.padStart(64, '0')
+fun BigInteger.toHex64() = this.toString(16).padStart(64, '0')
+
+fun BigInteger.to32ByteArray(): ByteArray = BigIntegers.asUnsignedByteArray(32, this)
+
+fun BigInteger.toLittleEndianByteArray(): ByteArray = BigIntegers.asUnsignedByteArray(this).reversedArray()

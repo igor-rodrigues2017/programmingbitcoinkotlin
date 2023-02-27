@@ -1,5 +1,6 @@
 package extension
 
+import org.bouncycastle.util.BigIntegers
 import java.math.BigInteger
 import java.math.BigInteger.ZERO
 
@@ -9,11 +10,11 @@ fun ByteArray.toHex() = this.joinToString("") { String.format("%02x", it) }
 fun ByteArray.encodeBase58(): String {
     BigInteger(1,this).let {
         val replaceZerosTo1 = "1".repeat(countZerosBytes())
-        return replaceZerosTo1 + endoce(it)
+        return replaceZerosTo1 + encode(it)
     }
 }
 
-private fun endoce(number: BigInteger): String {
+private fun encode(number: BigInteger): String {
     var number1 = number
     var result = ""
     while (number1 > ZERO) {
@@ -33,3 +34,5 @@ private fun ByteArray.countZerosBytes(): Int {
 }
 
 fun ByteArray.encodeBase58CheckSum() = (this + hash256(this).copyOfRange(0, 4)).encodeBase58()
+
+fun ByteArray.littleEndianToBigInteger() = BigIntegers.fromUnsignedByteArray(this.reversedArray())
