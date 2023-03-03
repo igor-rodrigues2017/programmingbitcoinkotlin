@@ -46,3 +46,13 @@ fun BigInteger.toHex64() = this.toString(16).padStart(64, '0')
 fun BigInteger.to32ByteArray(): ByteArray = BigIntegers.asUnsignedByteArray(32, this)
 
 fun BigInteger.toLittleEndianByteArray(): ByteArray = BigIntegers.asUnsignedByteArray(this).reversedArray()
+
+fun BigInteger.toVarint(): ByteArray {
+    return when {
+        this < 0xfd.toBigInteger() -> this.toByteArray()
+        this < 10_000.toBigInteger() -> byteArrayOf(VARINT_FD) + this.toLittleEndianByteArray()
+        this < 100_000_000.toBigInteger() -> byteArrayOf(VARINT_FE) + this.toLittleEndianByteArray()
+        this < 10_000_000_000_000_000.toBigInteger() -> byteArrayOf(VARINT_FF) + this.toLittleEndianByteArray()
+        else -> throw IllegalArgumentException("integer too large: $this")
+    }
+}

@@ -703,3 +703,135 @@ Here is how the WIF format is created:
 6. Take the combination of #4 and #5 and encode it in Base58.
 ```
 
+## Chapter 5 - Transactions
+
+### Transaction Components
+
+At a high level, a transaction really only has four components.
+
+```
+1. Version
+2. Inputs
+3. Outputs
+4. Locktime
+```
+
+The version indicates what additional features the transaction uses, inputs define what bitcoins are being spent, outputs define where the bitcoins are going, and locktime defines when this transaction starts being valid.
+
+<img src="images-readme/transaction-components.png" height="150" />
+
+The differently highlighted parts represent the version, inputs, outputs, and locktime, respectively.
+
+### Version
+
+It’s meant to give the receiver information about what the versioned thing is supposed to represent. The version number after the operating system helps you know what features it has and what APIs you can program against.
+
+<img src="images-readme/version.png" height="150" />
+
+You may notice here that the actual value in hexadecimal is 01000000, which doesn’t look like 1. Interpreted as a little-endian integer, however, this number is actually 1
+
+### Inputs
+
+Each input points to an output of a previous transaction.
+
+<img src="images-readme/inputs.png" height="150" />
+
+Bitcoin’s inputs are spending outputs of a previous transaction. That is, you need to have received bitcoins first to spend something. The inputs refer to bitcoins that belong to you. Each input needs two things:
+
+```
+• A reference to bitcoins you received previously
+• Proof that these are yours to spend
+```
+
+The inputs field can contain more than one input. This is analogous to using either a single $100 bill to pay for a $70 meal, or a $50 and a $20. The former only requires one input (“bill”); the latter requires two. There are situations where there could be even more inputs. In our analogy, we could pay for a $70 meal with 14 $5 bills, or even 7,000 pennies. This would be analogous to 14 inputs or 7,000 inputs.
+
+The number of inputs:
+
+<img src="images-readme/number-inputs.png" height="150" />
+
+We can see that the byte is actually 01, which means that this transaction has one input. It may be tempting here to assume that it’s always a single byte, but it’s not. A single byte has 8 bits, so anything over 255 inputs will not be expressible in a single byte.
+
+This is where varints come in. Varint is shorthand for variable integer, which is a way to encode an integer into bytes that range from 0 to 264 – 1. We could, of course, always reserve 8 bytes for the number of inputs, but that would be a lot of wasted space if we expect the number of inputs to be relatively small (say, under 200). This is the case with the number of inputs in a normal transaction, so using varints helps to save space.
+
+```
+• If the number is below 253, encode that number as a single byte (e.g., 100 → 0x64).
+• If the number is between 253 and 216 – 1, start with the 253 byte (fd) and then encode the number in 2 bytes in little-endian (e.g., 255 → 0xfdff00, 555 → 0xfd2b02).
+• If the number is between 216 and 232 – 1, start with the 254 byte (fe) and then encode the number in 4 bytes in little-endian (e.g., 70015 → 0xfe7f110100).
+• If the number is between 232 and 264 – 1, start with the 255 byte (ff) and then encode the number in 8 bytes in little-endian (e.g., 18005558675309 → 0xff6dc7ed3e60100000).
+```
+
+Each input contains four fields. The first two fields point to the previous transaction output and the last two fields define how the previous transaction output can be spent.
+
+```
+• Previous transaction ID
+• Previous transaction index
+• ScriptSig
+• Sequence
+```
+
+The **previous transaction ID is the hash256** of the previous transaction’s contents.
+
+As we’ll see, each transaction has to have at least one output, but may have many. Thus, we need to define exactly which output within a transaction we’re spending, which is captured in the previous transaction index.
+
+Note that the **previous transaction ID is 32 bytes** and that the **previous transaction index is 4 bytes.** Both are in little-endian.
+
+The ScriptSig has to do with Bitcoin’s smart contract language, Script. think of the ScriptSig as opening a locked box—something that can only be done by the owner of the transaction output. The **ScriptSig field is a variable-length** field, not a fixed-length field like most of what we’ve seenso far. A variable-length field requires us to define exactly how long the field will be, which is why the field is preceded by a **varint telling us how long it is**.
+
+The sequence was originally intended as a way to do what Satoshi called *“highfrequency trades”* with the locktime field. but is currently used with Replace-By-Fee (RBF) and OP_CHECKSEQUENCEVERIFY. The **sequence is also in little-endian and takes up 4 bytes**.
+
+<img src="images-readme/the-fields-input.png" height="150" />
+
+previous transaction ID, previous index, ScriptSig, and sequence
+
+### Outputs
+
+Outputs define where the bitcoins are going. Output serialization starts with how many outputs there are as a varint:
+
+<img src="images-readme/outputs.png" height="150" />
+
+Each output has two fields:
+
+```
+• Amount 
+• ScriptPubKey
+```
+
+The **amount** is the amount of bitcoins being assigned and is specified **in satoshis**, or 1/100,000,000ths of a bitcoin. The absolute maximum for the amount is the asymptotic limit of 21 million bitcoins in satoshis, which is 2,100,000,000,000,000 (2,100 trillion)
+satoshis. This number is greater than 232 (4.3 billion or so) and is thus stored in 64 bits, or **8 bytes.** The amount is serialized **in little-endian**.
+
+Think of the **ScriptPubKey as the locked box** that can only be opened by the holder of the key. It’s like a one-way safe that can receive deposits from anyone, but can only be opened by the owner of the safe. Like ScriptSig, ScriptPubKey is a **variable-length field** and is preceded by the length of the field in a **varint**.
+
+<img src="images-readme/the-fields-output.png" height="150" />
+
+A complete output field, showing the amount and ScriptPubKey
+
+#### UTXO Set
+
+```
+UTXO stands for unspent transaction output. The entire set of unspent transaction outputs at any given moment is called the UTXO set. The reason why UTXOs are important is because at any moment in time, they represent all the bitcoins that are
+available to be spent. In other words, these are the bitcoins that are in circulation. Full nodes on the network must keep track of the UTXO set, and keeping the UTXO set indexed makes validating new transactions much faster.
+For example, it’s easy to enforce a no-double-spending rule by looking up the previous transaction output in the UTXO set. If the input of a new transaction is using a transaction output that’s not in the UTXO set, that’s an attempt at a double-spend or a nonexistent output and thus invalid. Keeping the UTXO set handy is also very useful for validating transactions. we need to look up the amount and ScriptPubKey from the previous transaction output to validate transactions, so having these UTXOs handy can speed up transaction validation.
+```
+
+### Locktime
+
+Locktime is a way to time-delay a transaction.
+
+If the locktime is greater than or equal to 500,000,000, it’s a Unix timestamp. If it’s less than 500,000,000, it’s a block number.
+This way, transactions can be signed but unspendable until a certain point in Unix time or block height is reached.
+
+Note that locktime is ignored if the sequence numbers for every input are ffffffff.
+
+The serialization is in l**ittle-endian and 4 bytes**.
+
+<img src="images-readme/locktime.png" height="150" />
+
+The main problem with using locktime is that the recipient of the transaction has no certainty that the transaction will be good when the locktime comes. This is similar to a postdated bank check, which has the possibility of bouncing. The sender can spend the inputs prior to the locktime transaction getting into the blockchain, thus invalid ating the transaction at locktime.
+The uses before BIP0065 were limited. BIP0065 introduced OP_CHECKLOCKTIMEVERIFY, which makes locktime more useful by making an output unspendable until a certain locktime.
+
+### Transaction Fee
+
+One of the consensus rules of Bitcoin is that for any non-coinbase transactions, the sum of the inputs has to be greater than
+or equal to the sum of the outputs. This is because if every transaction had zero cost, there wouldn’t be any incentive for miners to include transactions in blocks. Fees are a way to incentivize miners to include transactions. Transactions not in blocks (so-called mempool transactions) are not part of the blockchain and are not final.
+
+The transaction fee is simply the sum of the inputs minus the sum of the outputs. This difference is what the miner gets to keep. As **inputs don’t have an amount field**, we have to look up the amount. This requires access to the blockchain, specifically the **UTXO set**.
