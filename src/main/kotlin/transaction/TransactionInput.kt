@@ -3,6 +3,7 @@ package transaction
 import extension.littleEndianToBigInteger
 import extension.toHex
 import extension.toLittleEndianByteArray
+import script.Script
 import java.io.ByteArrayInputStream
 import java.math.BigInteger
 

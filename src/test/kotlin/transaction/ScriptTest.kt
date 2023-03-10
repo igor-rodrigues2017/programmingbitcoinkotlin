@@ -4,6 +4,7 @@ import extension.decodeHex
 import extension.toHex
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import script.Script
 
 class ScriptTest : StringSpec({
 

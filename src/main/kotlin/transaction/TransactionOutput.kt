@@ -2,6 +2,7 @@ package transaction
 
 import extension.littleEndianToBigInteger
 import extension.toLittleEndianByteArray
+import script.Script
 import java.io.ByteArrayInputStream
 import java.math.BigInteger
 

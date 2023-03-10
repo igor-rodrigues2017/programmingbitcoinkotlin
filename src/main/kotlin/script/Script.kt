@@ -1,4 +1,4 @@
-package transaction
+package script
 
 import extension.littleEndianToBigInteger
 import extension.readVarint
