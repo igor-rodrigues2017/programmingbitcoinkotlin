@@ -835,3 +835,111 @@ One of the consensus rules of Bitcoin is that for any non-coinbase transactions,
 or equal to the sum of the outputs. This is because if every transaction had zero cost, there wouldn’t be any incentive for miners to include transactions in blocks. Fees are a way to incentivize miners to include transactions. Transactions not in blocks (so-called mempool transactions) are not part of the blockchain and are not final.
 
 The transaction fee is simply the sum of the inputs minus the sum of the outputs. This difference is what the miner gets to keep. As **inputs don’t have an amount field**, we have to look up the amount. This requires access to the blockchain, specifically the **UTXO set**.
+
+## Chapter 6 - Script
+
+The ability to lock and unlock coins is the mechanism by which we transfer bitcoin. Locking is giving some bitcoins to some entity. Unlocking is spending some bitcoins that you have received.
+
+### Mechanics of Script
+
+Script is a stack-based language similar to Forth. It’s intentionally limited in the sense that it avoids certain features. Specifically, Script avoids any mechanism for loops and is therefore not Turing complete.
+
+### How Script Works
+
+Script is a programming language, and like most programming languages, it processes one command at a time. The commands operate on a stack of elements. There are two possible types of commands: elements and operations.
+
+Elements are data. Technically, processing an element pushes that element onto the stack. Elements are byte strings of length 1 to 520. A typical element might be a DER signature or a SEC pubkey.
+
+Operations do something to the data. They consume zero or more elements from the processing stack and push zero or more elements back to the stack.
+
+After all the commands are evaluated, the top element of the stack must be nonzero for the script to resolve as valid. Having no elements in the stack or the top element being 0 would resolve as invalid. Resolving as invalid means that the transaction that includes the unlocking script is not accepted on the network.
+
+### Parsing the Script Fields
+
+Both the ScriptPubKey and ScriptSig are parsed the same way. If the byte is between 0x01 and 0x4b (75 in decimal) (whose value we call n), we read the next n bytes as an element. Otherwise, the byte represents an operation, which we have to look up.
+
+There are many more opcodes, which are coded in op.py, and the full list can be found at https://en.bitcoin.it/wiki/Script.
+
+#### Elements Longer Than 75 Bytes
+
+You might be wondering what would happen if you had an element with a length greater than 0x4b (75 in decimal). There are three
+specific opcodes for handling such elements: **OP_PUSHDATA1**, **OP_PUSHDATA2**, and **OP_PUSHDATA4**. OP_PUSHDATA1 means that the next byte contains how many bytes we need to read for the ele ment. OP_PUSHDATA2 means that the next 2 bytes contain how many bytes we need to read for the element. OP_PUSHDATA4 means that the next 4 bytes contain how many bytes we need to read for the element.
+
+### Combining the Script Fields
+
+The Script object represents the command set that requires evaluation. To evaluate a script, we need to combine the ScriptPubKey and ScriptSig fields. The lockbox (ScriptPubKey) and the unlocking mechanism (ScriptSig) are in different transactions. Specifically, the lockbox is where the bitcoins are received, and the unlocking script is where the bitcoins are spent. The input in the spending transaction points to the receiving transaction.
+
+<img src="images-readme/combining-scriptPubKey-scriptSig.png" height="180" />
+
+### Standard Scripts
+
+There are many types of standard scripts in Bitcoin, including the following:
+
+```
+p2pk
+	Pay-to-pubkey
+p2pkh
+	Pay-to-pubkey-hash
+p2sh
+	Pay-to-script-hash
+p2wpkh
+	Pay-to-witness-pubkey-hash
+p2wsh
+	Pay-to-witness-script-hash
+```
+
+Addresses are known script templates like these. Wallets know how to interpret various address types (p2pkh, p2sh, p2wpkh) and create the appropriate ScriptPubKeys. All of the examples here have a particular type of address format (Base58, Bech32) so wallets can pay to them.
+
+#### p2pk
+
+Pay-to-pubkey (p2pk) was used largely during the early days of Bitcoin. Most coins thought to belong to Satoshi are in p2pk UTXOs —that is, transaction outputs whose ScriptPubKeys have the p2pk form.
+
+Specifying where the bitcoins go is the job of the ScriptPubKey—this is the lockbox that receives the bitcoins.
+
+<img src="images-readme/pay-to-pubkey-scriptPubKey.png" height="150" />
+
+For p2pk, the ScriptSig required to unlock the corresponding ScriptPubKey is the signature followed by a single sighash byte.
+
+<img src="images-readme/pay-to-pubkey-scriptSig.png" height="150" />
+
+The ScriptPubKey and ScriptSig combine to make a command set that looks like:
+
+<img src="images-readme/p2pk-combined.png" height="150" />
+
+The two columns in are Script commands and the elements stack. At the end of the processing, the top element of the stack must be nonzero to be considered a valid ScriptSig. The Script commands are processed one at a time.
+
+<img src="images-readme/p2pk-start.png" height="190" />
+
+The first command is the signature, which is an element. This is data that is pushed to the stack
+
+<img src="images-readme/p2pk-step-1.png" height="190" />
+
+The second command is the pubkey, which is also an element. Again, this is data that is pushed to the stack
+
+<img src="images-readme/p2pk-step-2.png" height="190" />
+
+OP_CHECKSIG consumes two stack commands (pubkey and signature) and determines if they are valid for this transaction. OP_CHECKSIG will push a 1 to the stack if the signature is valid, and a 0 if not. Assuming that the signature is valid for this public key
+
+<img src="images-readme/p2pk-step-3.png" height="190" />
+
+We’re finished processing all the Script commands, and we’ve ended up with a single element on the stack. Since the top element is nonzero (1 is definitely not 0), this script is valid.
+If this transaction instead had an invalid signature, the result from OP_CHECKSIG would be 0
+
+#### p2pkh
+
+Pay-to-pubkey-hash was used during the early days of Bitcoin, though not as much as p2pk.
+The p2pkh ScriptPubKey, or locking script.
+
+<img src="images-readme/pay-to-pubkey-hash-scriptPubKey.png" height="190" />
+
+Like p2pk, OP_CHECKSIG is here and OP_HASH160 makes an appearance. Unlike p2pk, the SEC pubkey is not here, but a 20-byte hash is. There is also a new opcode here: OP_EQUALVERIFY.
+
+The p2pkh ScriptSig, or unlocking script.
+
+<img src="images-readme/pay-to-pubkey-hash-scriptSig.png" height="190" />
+
+Like p2pk, the ScriptSig has the DER signature. Unlike p2pk, the ScriptSig also has the SEC pubkey. The main difference between p2pk and p2pkh ScriptSigs is that the SEC pubkey has moved from the ScriptPubKey to the ScriptSig.
+
+The ScriptPubKey and ScriptSig combine to form a list of commands.
+
+<img src="images-readme/p2pkh-combined.png" height="200" />

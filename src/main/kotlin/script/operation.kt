@@ -1,58 +1,25 @@
 package script
 
+import ellipticcurve.S256Point
 import extension.*
+import signature.Signature
 import java.math.BigInteger
 import java.math.BigInteger.*
 import java.util.*
-import kotlin.experimental.and
-import kotlin.experimental.or
+import java.util.logging.Level
+import java.util.logging.Logger
 
 fun encodeNum(num: BigInteger): ByteArray {
-    if (num == ZERO) {
-        return ByteArray(0)
-    }
-    val absNum = num.abs()
-    val negative = num < ZERO
-    val result = mutableListOf<Byte>()
-    var absNumTemp = absNum
-    while (absNumTemp != ZERO) {
-        result.add((absNumTemp and 0xFF.toBigInteger()).toByte())
-        absNumTemp = absNumTemp shr 8
-    }
-    if (result.last().toInt() and 0x80 != 0) {
-        if (negative) {
-            result.add(0x80.toByte())
-        } else {
-            result.add(0.toByte())
-        }
-    } else if (negative) {
-        result[result.lastIndex] = result.last() or 0x80.toByte()
-    }
-    return result.toByteArray()
+    if (num == ZERO) return ByteArray(0)
+    return num.toByteArray().reversedArray()
 }
 
 fun decodeNum(element: ByteArray): BigInteger {
-    if (element.isEmpty()) {
-        return ZERO
-    }
-    val bigEndian = element.reversedArray()
-    val negative: Boolean
-    var result: BigInteger
-    if (bigEndian[0] and 0x80.toByte() != 0.toByte()) {
-        negative = true
-        result = bigEndian[0].toLong().toBigInteger() and 0x7f.toBigInteger()
-    } else {
-        negative = false
-        result = bigEndian[0].toLong().toBigInteger()
-    }
-    for (i in 1 until bigEndian.size) {
-        result shl 8
-        result += bigEndian[i].toLong().toBigInteger() and 0xff.toBigInteger()
-    }
-    return if (negative) -result else result
+    if (element.isEmpty()) return ZERO
+    return element.reversedArray().let { bigEndian -> BigInteger(bigEndian) }
 }
 
-fun opO(stack: Stack<ByteArray>) = stack.add(encodeNum(ZERO))
+fun op0(stack: Stack<ByteArray>) = stack.add(encodeNum(ZERO))
 
 fun op1Negate(stack: Stack<ByteArray>) = stack.add(encodeNum(-ONE))
 
@@ -90,15 +57,15 @@ fun op16(stack: Stack<ByteArray>) = stack.add(encodeNum(16.toBigInteger()))
 
 fun opNop(stack: Stack<ByteArray>) = true
 
-fun opIf(stack: Stack<ByteArray>, items: MutableList<Int>): Boolean {
+fun opIf(stack: Stack<ByteArray>, items: MutableList<Any>): Boolean {
     if (stack.size < 1) return false
-    val trueItems = mutableListOf<Int>()
-    val falseItems = mutableListOf<Int>()
+    val trueItems = mutableListOf<Any>()
+    val falseItems = mutableListOf<Any>()
     var currentArray = trueItems
     var found = false
     var numEndIfsNeeded = 1
     while (items.isNotEmpty()) {
-        when (val item = items.removeAt(0)) {
+        when (val item = items.removeFirst()) {
             99, 100 -> {
                 // Nested if, we have to go another endif
                 numEndIfsNeeded++
@@ -136,11 +103,11 @@ fun opIf(stack: Stack<ByteArray>, items: MutableList<Int>): Boolean {
     return true
 }
 
-fun opNotIf(stack: Stack<ByteArray>, items: MutableList<Int>): Boolean {
+fun opNotIf(stack: Stack<ByteArray>, items: Stack<Any>): Boolean {
     if (stack.size < 1) return false
     // go through and re-make the items array based on the top stack element
-    val trueItems = mutableListOf<Int>()
-    val falseItems = mutableListOf<Int>()
+    val trueItems = mutableListOf<Any>()
+    val falseItems = mutableListOf<Any>()
     var currentArray = trueItems
     var found = false
     var numEndIfsNeeded = 1
@@ -180,12 +147,12 @@ fun opVerify(stack: Stack<ByteArray>): Boolean {
     return decodeNum(element) != ZERO
 }
 
-fun opReturn(stack: Stack<ByteArray>) = false
-
 fun opToAltStack(stack: Stack<ByteArray>, altStack: Stack<ByteArray>): Boolean {
     if (stack.size < 1) return false
     return altStack.add(stack.pop())
 }
+
+fun opReturn(stack: Stack<ByteArray>) = false
 
 fun opFromAltStack(stack: Stack<ByteArray>, altStack: Stack<ByteArray>): Boolean {
     if (altStack.size < 1) return false
@@ -401,7 +368,7 @@ fun opNumEqualVerify(stack: Stack<ByteArray>): Boolean {
     return opNumEqual(stack) && opVerify(stack)
 }
 
-fun opNumNotequal(stack: Stack<ByteArray>): Boolean {
+fun opNumNotEqual(stack: Stack<ByteArray>): Boolean {
     if (stack.size < 2) return false
     val element1 = decodeNum(stack.pop())
     val element2 = decodeNum(stack.pop())
@@ -496,44 +463,80 @@ fun opHash256(stack: Stack<ByteArray>): Boolean {
     return stack.add(hash256(element))
 }
 
-fun opChecksig(stack: Stack<ByteArray>, z: ByteArray): Boolean {
-// check that there are at least 2 elements on the stack
-// the top element of the stack is the SEC pubkey
-// the next element of the stack is the DER signature
-// take off the last byte of the signature as that's the hash_type //parse the serialized pubkey and signature into objects
-// verify the signature using S256Point.verify()
-// push an encoded 1 or 0 depending on whether the signature verified
+fun opCheckSig(stack: Stack<ByteArray>, z: BigInteger): Boolean {
+    if (stack.size < 2) return false
+    val secPubKey = stack.pop()
+    val dreSignature = getDreSignatureWithoutHashType(stack)
+    runCatching {
+        val signature = Signature.parse(dreSignature)
+        val pubKey = S256Point.parse(secPubKey)
+        if (pubKey.verify(z, signature)) stack.add(encodeNum(ONE)) else stack.add(byteArrayOf())
+    }.onFailure {
+        Logger.getAnonymousLogger().log(Level.INFO, it.message)
+        return false
+    }
+    return true
+}
+
+/**
+ * take off the last byte of the signature as that's the hash_type
+ */
+private fun getDreSignatureWithoutHashType(stack: Stack<ByteArray>) = stack.pop().dropLast(1).toByteArray()
+
+fun opCheckSigVerify(stack: Stack<ByteArray>, z: BigInteger) = opCheckSig(stack, z) && opVerify(stack)
+
+fun opCheckMultiSig(stack: Stack<ByteArray>, z: BigInteger): Boolean {
     TODO("NOT IMPLEMENTED")
 }
 
-fun opCheckSigVerify(stack: Stack<ByteArray>, z: ByteArray) = opChecksig(stack, z) && opVerify(stack)
+fun opCheckMultiSigVerify(stack: Stack<ByteArray>, z: BigInteger) = opCheckMultiSig(stack, z) && opVerify(stack)
 
-fun opCheckMultiSig(stack: Stack<ByteArray>, z: ByteArray): Boolean {
-    TODO("NOT IMPLEMENTED")
-}
-
-fun opCheckMultiSigVerify(stack: Stack<ByteArray>, z: ByteArray) = opCheckMultiSig(stack, z) && opVerify(stack)
-
-fun opCheckLocktimeVerify(
+fun opCheckLockTimeVerify(
     stack: Stack<ByteArray>,
-    locktime: BigInteger,
+    lockTime: BigInteger,
     sequence: BigInteger
 ): Boolean {
     if (sequence == 0xffffffff.toBigInteger()) return false
+    if (stack.size < 1) return false
+    val element = decodeNum(stack.last())
+    if (element < ZERO) return false
+    if (element < 500_000_000.toBigInteger() &&
+        lockTime > 500_000_000.toBigInteger()
+    ) return false
+    if (lockTime < element) return false
     return true
-//    if len(stack) < 1:
-//    return False
-//    element = decode_num(stack[-1])
-//    if element < 0:
-//    return False
-//    if element < 500000000 and locktime > 500000000:
-//    return False
-//    if locktime < element:
-//    return False
-//    return True
 }
 
-val OP_CODE_NAMES = mapOf<Int, String>(
+fun opCheckSequenceVerify(
+    stack: Stack<ByteArray>,
+    version: Int,
+    sequence: BigInteger
+): Boolean {
+    if (sequence and (1 shl 31).toBigInteger() == (1 shl 31).toBigInteger()) {
+        return false
+    }
+    if (stack.size < 1) {
+        return false
+    }
+    val element = decodeNum(stack.last())
+    if (element < ZERO) {
+        return false
+    }
+    if (element.testBit(31)) {
+        if (version < 2) {
+            return false
+        } else if (sequence.testBit(31)) {
+            return false
+        } else if (element and ((1 shl 22) - 1).toBigInteger() != sequence and ((1 shl 22) - 1).toBigInteger()) {
+            return false
+        } else if ((element and 0xffff.toBigInteger()) > (sequence and 0xffff.toBigInteger())) {
+            return false
+        }
+    }
+    return true
+}
+
+val OP_CODE_NAMES = mapOf(
     0 to "OP_0",
     76 to "OP_PUSHDATA1",
     77 to "OP_PUSHDATA2",
@@ -625,4 +628,92 @@ val OP_CODE_NAMES = mapOf<Int, String>(
     183 to "OP_NOP8",
     184 to "OP_NOP9",
     185 to "OP_NOP10"
+)
+
+val OP_CODE_FUNCTIONS = mapOf(
+    0 to ::op0,
+    79 to ::op1Negate,
+    81 to ::op1,
+    82 to ::op2,
+    83 to ::op3,
+    84 to ::op4,
+    85 to ::op5,
+    86 to ::op6,
+    87 to ::op7,
+    88 to ::op8,
+    89 to ::op9,
+    90 to ::op10,
+    91 to ::op11,
+    92 to ::op12,
+    93 to ::op13,
+    94 to ::op14,
+    95 to ::op15,
+    96 to ::op16,
+    97 to ::opNop,
+    99 to ::opIf,
+    100 to ::opNotIf,
+    105 to ::opVerify,
+    106 to ::opReturn,
+    107 to ::opToAltStack,
+    108 to ::opFromAltStack,
+    109 to ::op2drop,
+    110 to ::op2dup,
+    111 to ::op3dup,
+    112 to ::op2over,
+    113 to ::op2rot,
+    114 to ::op2swap,
+    115 to ::opIfDup,
+    116 to ::opDepth,
+    117 to ::opDrop,
+    118 to ::opDup,
+    119 to ::opNip,
+    120 to ::opOver,
+    121 to ::opPick,
+    122 to ::opRoll,
+    123 to ::opRot,
+    124 to ::opSwap,
+    125 to ::opTuck,
+    130 to ::opSize,
+    135 to ::opEqual,
+    136 to ::opEqualVerify,
+    139 to ::op1add,
+    140 to ::op1sub,
+    143 to ::opNegate,
+    144 to ::opAbs,
+    145 to ::opNot,
+    146 to ::op0NotEqual,
+    147 to ::opAdd,
+    148 to ::opSub,
+    149 to ::opMul,
+    154 to ::opBoolAnd,
+    155 to ::opBoolOr,
+    156 to ::opNumEqual,
+    157 to ::opNumEqualVerify,
+    158 to ::opNumNotEqual,
+    159 to ::opLessThan,
+    160 to ::opGreaterThan,
+    161 to ::opLessThanOrEqual,
+    162 to ::opGreaterThanOrEqual,
+    163 to ::opMin,
+    164 to ::opMax,
+    165 to ::opWithin,
+    166 to ::opRipemd160,
+    167 to ::opSha1,
+    168 to ::opSha256,
+    169 to ::opHash160,
+    170 to ::opHash256,
+    172 to ::opCheckSig,
+    173 to ::opCheckSigVerify,
+    174 to ::opCheckMultiSig,
+    175 to ::opCheckMultiSigVerify,
+    176 to ::opNop,
+    177 to ::opCheckLockTimeVerify,
+    178 to ::opCheckSequenceVerify,
+    179 to ::opNop,
+    180 to ::opNop,
+    181 to ::opNop,
+    182 to ::opNop,
+    183 to ::opNop,
+    184 to ::opNop,
+    185 to ::opNop
 )

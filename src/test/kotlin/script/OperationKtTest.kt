@@ -1,11 +1,10 @@
 package script
 
-import extension.hash160
-import extension.hash256
-import extension.sha1
-import extension.sha256
+import extension.*
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import java.math.BigInteger.ONE
+import java.math.BigInteger.TWO
 import java.util.*
 
 class OperationKtTest : StringSpec({
@@ -454,7 +453,7 @@ class OperationKtTest : StringSpec({
             add(byteArrayOf(3))
             add(byteArrayOf(4))
             add(byteArrayOf(5))
-            add(byteArrayOf(-122))
+            add(byteArrayOf(-6))
         }
     }
 
@@ -468,7 +467,7 @@ class OperationKtTest : StringSpec({
 
         stack shouldBe getEmptyStack().apply {
             add(byteArrayOf(1))
-            add(byteArrayOf(6))
+            add(byteArrayOf(122))
         }
     }
 
@@ -686,7 +685,7 @@ class OperationKtTest : StringSpec({
             add(byteArrayOf(2))
         }
 
-        opNumNotequal(stack) shouldBe true
+        opNumNotEqual(stack) shouldBe true
 
         stack shouldBe getEmptyStack().apply {
             add(byteArrayOf(1))
@@ -699,7 +698,7 @@ class OperationKtTest : StringSpec({
             add(byteArrayOf(4))
         }
 
-        opNumNotequal(stack2) shouldBe true
+        opNumNotEqual(stack2) shouldBe true
 
         stack2 shouldBe getEmptyStack().apply {
             add(byteArrayOf(1))
@@ -913,14 +912,12 @@ class OperationKtTest : StringSpec({
 
     "should hash160 in the element" {
         val stack = getEmptyStack().apply {
-            add(byteArrayOf(10))
+            add("hello world".toByteArray())
         }
 
         opHash160(stack) shouldBe true
 
-        stack shouldBe getEmptyStack().apply {
-            add(hash160(byteArrayOf(10)))
-        }
+        stack[0].toHex() shouldBe "d7d5ee7824ff93f94c3055af9382c86c68b5ca92"
     }
 
     "should hash256 in the element" {
@@ -936,16 +933,67 @@ class OperationKtTest : StringSpec({
     }
 
     "should check locktime" {
-        val stack = getEmptyStack().apply {
-            add(byteArrayOf(1))
-            add(byteArrayOf(2))
-            add(byteArrayOf(3))
-            add(50001.toBigInteger().toByteArray())
-        }
-        val locktime = 50000.toBigInteger()
-        val sequence = 0xffffffff.toBigInteger()
+        var stack = getStack()
 
-        opCheckLocktimeVerify(stack, locktime, sequence) shouldBe false
+        var locktime = 50000.toBigInteger()
+        var sequence = 0xffffffff.toBigInteger()
+        opCheckLockTimeVerify(stack, locktime, sequence) shouldBe false
+
+        stack = getEmptyStack().apply {
+            add(byteArrayOf(-1))
+        }
+        sequence = 4.toBigInteger()
+        opCheckLockTimeVerify(stack, locktime, sequence) shouldBe false
+
+        stack = getEmptyStack().apply {
+            add(644_656.toBigInteger().toByteArray())
+        }
+        locktime = 500_000_001.toBigInteger()
+        opCheckLockTimeVerify(stack, locktime, sequence) shouldBe false
+
+        stack = getEmptyStack().apply {
+            add(644656.toBigInteger().toLittleEndianByteArray())
+        }
+        locktime = 644000.toBigInteger()
+        opCheckLockTimeVerify(stack, locktime, sequence) shouldBe false
+
+    }
+
+    "should check sequence" {
+        var stack = getEmptyStack().apply {
+            add(644656.toBigInteger().toLittleEndianByteArray())
+        }
+
+        var version = 1
+        var sequence = ONE.negate()
+        opCheckSequenceVerify(stack, version, sequence) shouldBe false
+
+        stack = getEmptyStack().apply {
+            add(2147483648.toBigInteger().toByteArray().reversedArray())
+        }
+        version = 1
+        sequence = ONE
+        opCheckSequenceVerify(stack, version, sequence) shouldBe false
+
+        version = 1
+        sequence = TWO
+        opCheckSequenceVerify(stack, version, sequence) shouldBe false
+
+    }
+
+    "should check signature" {
+        val z = "7c076ff316692a3d7eb3c3bb0f8b1488cf72e1afcd929e29307032997a838a3d".toBigInteger(16)
+        val sec = ("04887387e452b8eacc4acfde10d9aaf7f6d9a0f975aabb10d006e" +
+                "4da568744d06c61de6d95231cd89026e286df3b6ae4a894a3378e393e93a0f45b666329a0ae34").decodeHex()
+        val sig = ("3045022000eff69ef2b1bd93a66ed5219add4fb51e11a840f404876" +
+                "325a1e8ffe0529a2c022100c7207fee197d27c618aea621406f6bf5ef6fca38681d82b2f06fddbdce6feab601").decodeHex()
+        val stack = getEmptyStack().apply {
+            add(sig)
+            add(sec)
+        }
+
+        opCheckSig(stack, z) shouldBe true
+        stack[0].littleEndianToBigInteger() shouldBe ONE
     }
 
 })
