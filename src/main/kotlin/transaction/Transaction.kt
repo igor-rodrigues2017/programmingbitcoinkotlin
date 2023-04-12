@@ -1,14 +1,16 @@
 package transaction
 
 import extension.*
+import script.Script
 import java.io.ByteArrayInputStream
 import java.math.BigInteger
+import java.math.BigInteger.ZERO
 
 data class Transaction(
     val version: BigInteger,
     val inputs: List<TransactionInput> = listOf(),
     val outputs: List<TransactionOutput> = listOf(),
-    val lockTime: BigInteger = BigInteger.ZERO,
+    val lockTime: BigInteger = ZERO,
     val testnet: Boolean = false
 ) {
 
@@ -44,12 +46,71 @@ data class Transaction(
 
     fun id() = hash().toHex()
 
+    fun fee(): BigInteger = inputs.sumOf { it.value() } - outputs.sumOf { it.amount }
+
+    fun serialize() = serializeVersion() + serializeInputs() + serializeOutputs() + serializeLockTime()
+
+    fun sigHash(inputIndex: Int): BigInteger {
+        return hash256(
+            serializeVersion() +
+                    serializeInputsForSigHash(inputIndex) +
+                    serializeOutputs() +
+                    serializeLockTime() +
+                    serializeHashType()
+        ).toBigInteger()
+    }
+
+    fun verifyInput(inputIndex: Int): Boolean {
+        return inputs[inputIndex].let { input ->
+            val z = sigHash(inputIndex)
+            combineSignatureAndPubkeyScripts(input).evaluate(z)
+        }
+    }
+
+    /**
+     * Note that a full node would verify more things, like checking for double-spends and
+     * checking some other consensus rules
+     */
+    fun verify(): Boolean {
+        if (creatingMoney()) return false
+        inputs.forEachIndexed { index, _ ->
+            if (isInvalidSignature(index)) return false
+        }
+        return true
+    }
+
+    private fun combineSignatureAndPubkeyScripts(input: TransactionInput) =
+        input.scriptSignature + input.scriptPubkey(testnet)
+
+    private fun isInvalidSignature(index: Int) = !this.verifyInput(index)
+
+    private fun creatingMoney() = fee() < ZERO
+
     /**
      * Serialization in little-endian
      */
     private fun hash() = hash256(serialize()).reversedArray()
 
-    fun serialize() = serializeVersion() + serializeInputs() + serializeOutputs() + serializeLockTime()
+    private fun serializeInputsForSigHash(inputIndex: Int): ByteArray {
+        return lengthInVarint(inputs) + modifySignatureInInputs(inputIndex)
+    }
+
+    private fun modifySignatureInInputs(inputIndex: Int) =
+        inputs.foldIndexed(byteArrayOf()) { index, acc, transactionInput ->
+            acc + if (index == inputIndex) {
+                exchangeScriptSignatureToScriptPubkey(transactionInput)
+            } else {
+                emptyScriptSignature(transactionInput)
+            }
+        }
+
+    private fun emptyScriptSignature(transactionInput: TransactionInput) = transactionInput.copy(
+        scriptSignature = Script(),
+    ).serialize()
+
+    private fun exchangeScriptSignatureToScriptPubkey(transactionInput: TransactionInput) = transactionInput.copy(
+        scriptSignature = transactionInput.scriptPubkey(this.testnet),
+    ).serialize()
 
     private fun serializeVersion() = version.toLittleEndianByteArray().copyOf(4)
 
@@ -63,6 +124,8 @@ data class Transaction(
 
     private fun lengthInVarint(transactionInputs: List<Any>) = transactionInputs.size.toBigInteger().toVarint()
 
+    private fun serializeHashType() = SIGHASH_ALL.toLittleEndianByteArray().copyOf(4)
+
     override fun toString() = """
         transaction: ${id()}
         version: $version
@@ -70,7 +133,5 @@ data class Transaction(
         outputs: ${outputs.joinToString("\n")}
         locktime: $lockTime
     """.trimIndent()
-
-    fun fee(): BigInteger = inputs.sumOf { it.value() } - outputs.sumOf { it.amount }
 }
 

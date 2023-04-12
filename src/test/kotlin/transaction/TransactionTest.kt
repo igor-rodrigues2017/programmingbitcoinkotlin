@@ -53,7 +53,28 @@ class TransactionTest : StringSpec({
     "should calculation the fee of the transaction" {
         transaction.fee() shouldBe 40000.toBigInteger()
     }
+
+    "should calculate signature hash from a input transaction" {
+        val transactionRetrieve = getTransaction(
+            "452c629d67e41baec3ac6f04fe744b4b9617f8f859c63b3002f8684e7a4fee03",
+            false
+        )
+        val hashInInteger = BigInteger("27e0c5994dec7824e56dec6b2fcb342eb7cdb0d0957c2fce9882f715e85d81a6", 16)
+        transactionRetrieve.sigHash(0) shouldBe hashInInteger
+    }
+
+    "should verify Input signature" {
+        transaction.verifyInput(0) shouldBe true
+    }
+
+    "should verify a transaction" {
+        val transactionRetrieve = getTransaction("452c629d67e41baec3ac6f04fe744b4b9617f8f859c63b3002f8684e7a4fee03")
+        transactionRetrieve.verify() shouldBe true
+    }
 })
+
+private fun getTransaction(transactionId: String, testnet: Boolean = false) = TransactionFetcher
+    .fetch(transactionId, testnet)
 
 private const val TRANSACTION_HEX =
     "0100000001813f79011acb80925dfe69b3def355fe914bd1d96a3f5f71bf8303c6a989c7d1000000006b483045022100e" +

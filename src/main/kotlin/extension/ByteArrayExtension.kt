@@ -3,9 +3,12 @@ package extension
 import org.bouncycastle.util.BigIntegers
 import java.io.ByteArrayInputStream
 import java.math.BigInteger
-import java.math.BigInteger.ZERO
+import java.math.BigInteger.*
 
 const val BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+val SIGHASH_ALL = ONE
+val SIGHASH_NONE = TWO
+val SIGHASH_SINGLE = 3.toBigInteger()
 const val VARINT_FD = 0xfd.toByte()
 const val VARINT_FE = 0xfe.toByte()
 const val VARINT_FF = 0xff.toByte()
@@ -40,6 +43,8 @@ private fun ByteArray.countZerosBytes(): Int {
 fun ByteArray.encodeBase58CheckSum() = (this + hash256(this).copyOfRange(0, 4)).encodeBase58()
 
 fun ByteArray.littleEndianToBigInteger(): BigInteger = BigIntegers.fromUnsignedByteArray(this.reversedArray())
+
+fun ByteArray.toBigInteger(): BigInteger = BigIntegers.fromUnsignedByteArray(this)
 
 fun ByteArrayInputStream.readVarint(): BigInteger {
     return when (val bytePrefix = this.readNBytes(1).first()) {
