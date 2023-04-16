@@ -10,7 +10,7 @@ import java.math.BigInteger
 data class TransactionInput(
     val previousTransactionId: ByteArray,
     val previousIndex: BigInteger,
-    val scriptSignature: Script = Script(),
+    var scriptSignature: Script = Script(),
     val sequence: BigInteger = 0xffffffff.toBigInteger()
 ) {
 
@@ -58,6 +58,5 @@ data class TransactionInput(
         result = 31 * result + sequence.hashCode()
         return result
     }
-
 
 }

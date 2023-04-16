@@ -2,6 +2,7 @@ package script
 
 import extension.littleEndianToBigInteger
 import extension.readVarint
+import extension.toHex
 import extension.toLittleEndianByteArray
 import extension.toVarint
 import java.io.ByteArrayInputStream
@@ -11,6 +12,15 @@ import java.util.*
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.reflect.KFunction
+
+private const val OP_DUP = 0x76
+private const val OP_HASH160 = 0xa9
+private const val OP_EQUALVERIFY = 0x88
+private const val OPCHECKSIG = 0xac
+
+fun p2pkhScriptPubkey(h160Pubkey: ByteArray) = Script(listOf(OP_DUP, OP_HASH160, h160Pubkey, OP_EQUALVERIFY, OPCHECKSIG))
+
+fun p2pkhScriptSig(derSignature: ByteArray, secPublicKey: ByteArray) = Script(listOf(derSignature, secPublicKey))
 
 class Script(val commands: List<Any> = listOf()) {
 
@@ -248,5 +258,20 @@ class Script(val commands: List<Any> = listOf()) {
     }
 
     private fun isScriptSuccess(stack: Stack<Any>) = stack.size != 0 || stack.pop() != byteArrayOf()
+
+    override fun toString(): String {
+        val result = mutableListOf<String>()
+        commands.forEach { command ->
+            when(command) {
+                is Int -> {
+                    val name = if (OP_CODE_NAMES.containsKey(command)) OP_CODE_NAMES[command] else "OP_[$command]"
+                    result.add(name!!)
+                }
+                else -> result.add((command as ByteArray).toHex())
+            }
+        }
+
+        return result.joinToString(" ")
+    }
 
 }

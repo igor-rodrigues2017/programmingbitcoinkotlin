@@ -40,7 +40,7 @@ data class Signature(val r: BigInteger, val s: BigInteger) {
             }
         }
     }
-    fun dre(): ByteArray = serialize(prepareByteArray(r), prepareByteArray(s)).let { putMarkerAndLength(MARKER_30, it) }
+    fun der(): ByteArray = serialize(prepareByteArray(r), prepareByteArray(s)).let { putMarkerAndLength(MARKER_30, it) }
     private fun prepareByteArray(bigInteger: BigInteger) = bytesWithoutNullBytesAtBeginning(bigInteger).let {
             if (checkMostSignificantBit(it)) byteArrayOf(0x00) + it else it
         }

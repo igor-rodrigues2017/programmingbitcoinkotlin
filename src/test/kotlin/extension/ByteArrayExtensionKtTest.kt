@@ -22,7 +22,18 @@ class ByteArrayExtensionKtTest : StringSpec({
             )
         ) { hex, base58 ->
             hex.decodeHex().encodeBase58() shouldBe base58
+        }
+    }
 
+    "should decode base58 to number" {
+        forAll(
+            row(
+                "mnrVtF8DWjMu839VW3rBfgYaAfKk8983Xf",
+                "507b27411ccf7f16f10297de6cef3f291623eddf"
+            )
+        ) { addr, hash160 ->
+            addr.decodeBase58().toHex() shouldBe hash160
+            (byteArrayOf(0x6f.toByte()) + hash160.decodeHex()).encodeBase58CheckSum() shouldBe addr
         }
     }
 

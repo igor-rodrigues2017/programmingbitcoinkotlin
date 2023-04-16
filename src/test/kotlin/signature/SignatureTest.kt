@@ -17,7 +17,7 @@ class SignatureTest : StringSpec({
         Signature(
             r = "37206a0610995c58074999cb9767b87af4c4978db68c06e8e6e81d282047a7c6".toBigInteger(16),
             s = "8ca63759c1157ebeaec0d03cecca119fc9a75bf8e6d0fa65c841c8e2738cdaec".toBigInteger(16)
-        ).dre().toHex() shouldBe "$marker" +
+        ).der().toHex() shouldBe "$marker" +
                 "${sigLength}${rMarker}${rLength}" +
                 "37206a0610995c58074999cb9767b87af4c4978db68c06e8e6e81d282047a7c6" +
                 "${sMarker}${sLength}" +

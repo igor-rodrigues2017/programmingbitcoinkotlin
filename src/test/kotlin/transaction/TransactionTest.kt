@@ -6,6 +6,7 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockkObject
+import signature.PrivateKey
 import java.math.BigInteger
 
 class TransactionTest : StringSpec({
@@ -71,10 +72,21 @@ class TransactionTest : StringSpec({
         val transactionRetrieve = getTransaction("452c629d67e41baec3ac6f04fe744b4b9617f8f859c63b3002f8684e7a4fee03")
         transactionRetrieve.verify() shouldBe true
     }
+
+    "should sign an input" {
+        val privateKey = PrivateKey(8675309.toBigInteger())
+        val stream = NO_SIGN_TRANSACTION_HEX.decodeHex().inputStream()
+        Transaction.parse(stream, testnet = true).signInput(0, privateKey) shouldBe true
+    }
 })
 
 private fun getTransaction(transactionId: String, testnet: Boolean = false) = TransactionFetcher
     .fetch(transactionId, testnet)
+
+private const val NO_SIGN_TRANSACTION_HEX =
+    "010000000199a24308080ab26e6fb65c4eccfadf76749bb5bfa8cb08f291320b3c21e56f0d0d00000000ffffffff02408af701000000001976" +
+            "a914d52ad7ca9b3d096a38e752c2018e6fbc40cdf26f88ac80969800000000001976a914507b27411ccf7f16f10297de6cef3f2916" +
+            "23eddf88ac00000000"
 
 private const val TRANSACTION_HEX =
     "0100000001813f79011acb80925dfe69b3def355fe914bd1d96a3f5f71bf8303c6a989c7d1000000006b483045022100e" +

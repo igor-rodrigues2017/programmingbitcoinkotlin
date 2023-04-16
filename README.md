@@ -424,18 +424,16 @@ These numbers are known publicly and together form the cryptographic curve. Ther
 • n = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
 ```
 
-```
-How Big is 2²⁵⁶?
-2²⁵⁶ doesn’t seem that big because we can express it succinctly, but in reality, it is an enormous number. To give you an idea, here are some relative scales:
-2²⁵⁶ ~ 10⁷⁷
-• Number of atoms in and on Earth ~ 10⁵⁰
-• Number of atoms in the solar system ~ 10⁵⁷
-• Number of atoms in the Milky Way ~ 10⁶⁸
-• Number of atoms in the universe ~ 10⁸⁰
-A trillion (10¹²) computers doing a trillion computations every trillionth (10⁻¹²) of a
-second for a trillion years is still less than 10⁵⁶ computations.
-Think of finding a private key this way: there are as many possible private keys in Bitcoin as there are atoms in a billion galaxies.
-```
+> How Big is 2²⁵⁶?
+> 2²⁵⁶ doesn’t seem that big because we can express it succinctly, but in reality, it is an enormous number. To give you an idea, here are some relative scales:
+> 2²⁵⁶ ~ 10⁷⁷
+> • Number of atoms in and on Earth ~ 10⁵⁰
+> • Number of atoms in the solar system ~ 10⁵⁷
+> • Number of atoms in the Milky Way ~ 10⁶⁸
+> • Number of atoms in the universe ~ 10⁸⁰
+> A trillion (10¹²) computers doing a trillion computations every trillionth (10⁻¹²) of a
+> second for a trillion years is still less than 10⁵⁶ computations.
+> Think of finding a private key this way: there are as many possible private keys in Bitcoin as there are atoms in a billion galaxies.
 
 ### Public Key Cryptography
 
@@ -807,11 +805,9 @@ A complete output field, showing the amount and ScriptPubKey
 
 #### UTXO Set
 
-```
-UTXO stands for unspent transaction output. The entire set of unspent transaction outputs at any given moment is called the UTXO set. The reason why UTXOs are important is because at any moment in time, they represent all the bitcoins that are
-available to be spent. In other words, these are the bitcoins that are in circulation. Full nodes on the network must keep track of the UTXO set, and keeping the UTXO set indexed makes validating new transactions much faster.
-For example, it’s easy to enforce a no-double-spending rule by looking up the previous transaction output in the UTXO set. If the input of a new transaction is using a transaction output that’s not in the UTXO set, that’s an attempt at a double-spend or a nonexistent output and thus invalid. Keeping the UTXO set handy is also very useful for validating transactions. we need to look up the amount and ScriptPubKey from the previous transaction output to validate transactions, so having these UTXOs handy can speed up transaction validation.
-```
+> UTXO stands for unspent transaction output. The entire set of unspent transaction outputs at any given moment is called the UTXO set. The reason why UTXOs are important is because at any moment in time, they represent all the bitcoins that are
+> available to be spent. In other words, these are the bitcoins that are in circulation. Full nodes on the network must keep track of the UTXO set, and keeping the UTXO set indexed makes validating new transactions much faster.
+> For example, it’s easy to enforce a no-double-spending rule by looking up the previous transaction output in the UTXO set. If the input of a new transaction is using a transaction output that’s not in the UTXO set, that’s an attempt at a double-spend or a nonexistent output and thus invalid. Keeping the UTXO set handy is also very useful for validating transactions. we need to look up the amount and ScriptPubKey from the previous transaction output to validate transactions, so having these UTXOs handy can speed up transaction validation.
 
 ### Locktime
 
@@ -943,3 +939,125 @@ Like p2pk, the ScriptSig has the DER signature. Unlike p2pk, the ScriptSig also 
 The ScriptPubKey and ScriptSig combine to form a list of commands.
 
 <img src="images-readme/p2pkh-combined.png" height="200" />
+
+
+
+## CHAPTER 7 - Transaction Creation and Validation
+
+### Validating Transactions
+
+The main things that a node checks:
+
+```
+1. The inputs of the transaction are previously unspent.
+2. The sum of the inputs is greater than or equal to the sum of the outputs.
+3. The ScriptSig successfully unlocks the previous ScriptPubKey.
+```
+
+#### Checking the Spentness of Inputs
+
+To prevent double-spending, a node checks that each input exists and has not been spent. This can be checked by any full node by looking at the ***UTXO set***.
+
+In Bitcoin, we can determine whether an input is being double-spent by keeping track of the UTXOs. If an input is in the UTXO set, that transaction input both exists and is not double-spending. If the transaction passes the rest of the validity tests, then we remove all the inputs of the transaction from the UTXO set.
+
+#### Checking the Sum of the Inputs Versus the Sum of the Outputs
+
+Nodes also make sure that the sum of the inputs is greater than or equal to the sum of the outputs. This ensures that the transaction does not create new coins. The one exception is a *coinbase transaction*. Since inputs don’t have an amount field, this must be looked up on the blockchain.
+
+#### Checking the Signature
+
+A transaction typically has at least one signature per input. If there are multisig outputs being spent, there may be more than one. As we learned in Chapter 3, the ECDSA signature algorithm requires the public key P, the signature hash z, and the signature (r,s). Once these are known, the process of verifying the signature is pretty simple.
+
+SEC public keys and DER signatures are in the stack when a command like OP_CHECKSIG is executed, making getting the public key and signature pretty straightforward. The hard part is getting the signature hash. A naive way to do this
+would be to hash the transaction serialization.
+
+<img src="images-readme/the-script-sig.png" height="150" />
+
+Unfortunately, we can’t do that, since the signature is part of the ScriptSig*(A signature is in the yellow highlighted part)* and a signature can’t sign itself.
+
+Instead, we modify the transaction before signing it. That is, we compute a different signature hash for each input.
+
+##### Step 1: Empty all the ScriptSigs
+
+The first step is to empty all the ScriptSigs when checking the signature. The same procedure is used for creating the signature, except the ScriptSigs are usually already empty.
+
+<img src="images-readme/the-script-sig-empty.png" height="80" />
+
+Note that this example has only one input, so only that input’s ScriptSig is emptied, but it’s possible to have more than one input. In that case, each of those would be emptied.
+
+##### Step 2: Replace the ScriptSig of the input being signed with the previous ScriptPubKey
+
+Each input points to a previous transaction output, which has a ScriptPubKey.
+
+<img src="images-readme/combining-scriptPubKey-scriptSig.png" height="180" />
+
+We take the ScriptPubKey that the input is pointing to and put that in place of the empty ScriptSig. This may require a lookup on the blockchain, but in practice the signer already knows the ScriptPubKey, as the input is one where the signer has the private key.
+
+<img src="images-readme/replace-the-script-sig.png" height="100" />
+
+##### Step 3: Append the hash type
+
+Last, we add a 4-byte hash type to the end. This is to specify what the signature is authorizing. The signature can authorize this input to go with all the other inputs and outputs (SIGHASH_ALL), go with a specific output (SIGHASH_SINGLE), or go with any output whatsoever (SIGHASH_NONE). The latter two have some theoretical use cases, but in practice, almost every transaction is signed with SIGHASH_ALL. There’s also a rarely used hash type called SIGHASH_ANYONECANPAY that can be combined with any of the previous three, which we won’t get into here. For SIGHASH_ALL, the final transaction must have the exact outputs that were signed or the input signature is invalid.
+
+The integer corresponding to SIGHASH_ALL is 1 and this has to be encoded in little-endian over 4 bytes, which makes the modified transaction look like:
+
+<img src="images-readme/replace-the-script-sig-hash-type.png" height="100" />
+
+Append the hash type (SIGHASH_ALL), or the brown 01000000.
+
+The hash256 of this modif`ied transaction is interpreted as a big-endian integer to produce z.
+
+> **Quadratic Hashing**
+> The signature hashing algorithm is inefficient and wasteful. The quadratic hashing problem states that time required to calculate the signature hashes increases quadratically with the number of inputs in a transaction. Specifically, not only will the number of hash256 operations for calculating z increase on a per-input basis, but in addition, the length of the transaction will increase, slowing down each hash256 operation because the entire signature hash will need to be calculated anew for each input. This was particularly obvious with the biggest transaction mined to date:
+>
+> bb41a757f405890fb0f5856228e23b715702d714d59bf2b1feb70d8b2b4e3e08
+>
+> This transaction had 5,569 inputs and 1 output and took many miners over a minute to validate, as the signature hashes for the transaction were expensive to calculate.
+> Segwit (Chapter 13) fixes this with a different way of calculating the signature hash, which is specified in BIP0143.
+
+
+
+Note that a full node would verify more things, like checking for double-spends and checking some other consensus rules not discussed in this chapter (max sigops, size of ScriptSig, etc.), but this is good enough for our library.
+
+### Creating Transactions
+
+Transactions we create will require the sum of the inputs to be greater than or equal to the sum of the outputs. Similarly,
+transactions we create will require a ScriptSig that, when combined with the ScriptPubKey, will be valid.
+To create a transaction, we need at least one output we’ve received. That is, we need an output from the UTXO set whose ScriptPubKey we can unlock. The vast majority of the time, we need one or more private keys corresponding to the public keys that
+are hashed in the ScriptPubKey.
+
+#### Constructing the Transaction
+
+The construction of a transaction requires answering some basic questions:
+
+```
+1. Where do we want the bitcoins to go?
+2. What UTXOs can we spend?
+3. How quickly do we want this transaction to get into the blockchain?
+```
+
+> **Why Reusing Addresses Is a Bad Idea**
+> Back in Chapter 6, we went through how p2pk was inferior to p2pkh, in part because it was only protected by ECDSA. p2pkh, on the other hand, is also protected by sha256 and ripemd160. However, because the blockchain is public, once we spend from a ScriptPubKey corresponding to our address, we reveal our public key as part of the ScriptSig. Once we’ve revealed that public key, sha256 and ripemd160 no longer protect us, as the attacker knows the public key and doesn’t have to guess it.
+> As of this writing, we are still protected by the discrete log problem, which is unlikely to be broken any time soon. It’s important
+> from a security perspective, however, to understand what we’re protected by.
+> The other reason to not reuse addresses is for privacy. Having a single address for all our transactions means that people can link our transactions together. If, for example, we bought something private (say, medication to treat some disease we don’t want others to know about) and spent another output with the same ScriptPubKey for a donation to some charity, the charity and the medication vendor could identify that we had done business with the other.
+> Privacy leaks tend to become security holes over time.
+
+> **Fee Estimation**
+>
+> Fee estimation is done on a per-byte basis. If your transaction is 600 bytes, it will have double the fees as a transaction that’s 300 bytes. This is because block space is limited and larger transactions take up more space. This calculation has changed a bit since Segwit (see Chapter 13), but the general principle still applies. We want to pay enough on a per-byte basis so that miners are motivated to include our transaction as soon as possible.
+> When blocks aren’t full, almost any amount above the default relay limit (1 satoshi/byte) is enough to get a transaction included. When blocks are full, this is not an easy thing to estimate. There are multiple ways to estimate fees, including:
+>
+> - Looking at various fee levels and estimating the probability of inclusion based on past blocks and the mempools at the time
+> - Looking at the current mempool and adding a fee that roughly corresponds to enough economic incentivization
+> - Going with some fixed fee
+>
+> Many wallets use different strategies, and this is an active area of research.
+
+We need a way to take an address and get the **20-byte hash** out of it. This is the opposite of encoding an address.
+
+We also need a way to convert the **20-byte hash to a ScriptPubKey**.
+
+#### Signing the Transaction
+
+Signing the transaction could be tricky, but we know how to get the signature hash, z, from earlier in this chapter. If we have the private key whose public key hash160s to the 20-byte hash in the ScriptPubKey, we can sign z and produce the DER signature.

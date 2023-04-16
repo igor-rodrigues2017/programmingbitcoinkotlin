@@ -2,7 +2,11 @@ package signature
 
 import ellipticcurve.G
 import ellipticcurve.N
-import extension.*
+import extension.encodeBase58CheckSum
+import extension.hash256InBigInteger
+import extension.invertFermatTheorem
+import extension.times
+import extension.to32ByteArray
 import java.math.BigInteger
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -16,8 +20,16 @@ class PrivateKey(private val e: BigInteger) {
 
     override fun toString() = e.toString(16).padStart(64, '0')
 
+    fun sign(z: BigInteger): Signature {
+        return signature(z)
+    }
+
     fun sign(message: String): Signature {
         val z = hash256InBigInteger(message)
+        return signature(z)
+    }
+
+    private fun signature(z: BigInteger): Signature {
         val k = deterministicK(z)
         val r = getXCoordinateOfThePoint(k)
         val s = ((z + r * e) * k.invertFermatTheorem()).mod(N)

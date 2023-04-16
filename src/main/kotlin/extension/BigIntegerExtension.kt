@@ -45,6 +45,8 @@ fun BigInteger.toHex64() = this.toString(16).padStart(64, '0')
 
 fun BigInteger.to32ByteArray(): ByteArray = BigIntegers.asUnsignedByteArray(32, this)
 
+fun BigInteger.to25ByteArray(): ByteArray = BigIntegers.asUnsignedByteArray(25, this)
+
 fun BigInteger.toLittleEndianByteArray(): ByteArray = BigIntegers.asUnsignedByteArray(this).reversedArray()
 
 fun BigInteger.toVarint(): ByteArray {

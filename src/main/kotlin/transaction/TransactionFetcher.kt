@@ -5,6 +5,8 @@ import configuration.MAIN_NET_URL
 import configuration.TEST_NET_URL
 import extension.decodeHex
 import extension.littleEndianToBigInteger
+import java.util.logging.Level
+import java.util.logging.Logger
 
 class TransactionFetcher {
 
@@ -31,8 +33,11 @@ class TransactionFetcher {
 
         private fun thereNoInCache(transactionId: String) = cache.none { it.key == transactionId }
 
-        private fun getTransactionHex(testnet: Boolean, transactionId: String) =
-            "${getBaseUrl(testnet)}/api/tx/$transactionId/hex".httpGet().responseString().third.get()
+        private fun getTransactionHex(testnet: Boolean, transactionId: String): String =
+            "${getBaseUrl(testnet)}/api/tx/$transactionId/hex".let { url ->
+                Logger.getAnonymousLogger().log(Level.INFO, "Request: $url")
+                url.httpGet().responseString().third.get()
+            }
 
         private fun getBaseUrl(testnet: Boolean = false) = if (testnet) TEST_NET_URL else MAIN_NET_URL
 
