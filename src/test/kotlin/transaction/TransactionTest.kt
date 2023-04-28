@@ -60,23 +60,34 @@ class TransactionTest : StringSpec({
             "452c629d67e41baec3ac6f04fe744b4b9617f8f859c63b3002f8684e7a4fee03",
             false
         )
-        val hashInInteger = BigInteger("27e0c5994dec7824e56dec6b2fcb342eb7cdb0d0957c2fce9882f715e85d81a6", 16)
-        transactionRetrieve.sigHash(0) shouldBe hashInInteger
+        transactionRetrieve.sigHash(0) shouldBe
+                BigInteger("27e0c5994dec7824e56dec6b2fcb342eb7cdb0d0957c2fce9882f715e85d81a6", 16)
     }
 
     "should verify Input signature" {
         transaction.verifyInput(0) shouldBe true
     }
 
-    "should verify a transaction" {
-        val transactionRetrieve = getTransaction("452c629d67e41baec3ac6f04fe744b4b9617f8f859c63b3002f8684e7a4fee03")
-        transactionRetrieve.verify() shouldBe true
+    "should verify a transaction p2pkh" {
+        val transaction1 = getTransaction("452c629d67e41baec3ac6f04fe744b4b9617f8f859c63b3002f8684e7a4fee03")
+        transaction1.verify() shouldBe true
+        val transaction2 = getTransaction("5418099cc755cb9dd3ebc6cf1a7888ad53a1a3beb5a025bce89eb1bf7f1650a2", testnet = true)
+        transaction2.verify() shouldBe true
+    }
+
+    "should verify a transaction p2sh" {
+        val transaction1 = getTransaction("46df1a9484d0a81d03ce0ee543ab6e1a23ed06175c104a178268fad381216c2b")
+        transaction1.verify() shouldBe true
     }
 
     "should sign an input" {
         val privateKey = PrivateKey(8675309.toBigInteger())
-        val stream = NO_SIGN_TRANSACTION_HEX.decodeHex().inputStream()
-        Transaction.parse(stream, testnet = true).signInput(0, privateKey) shouldBe true
+        val transactionToSign = Transaction.parse(NO_SIGN_TRANSACTION_HEX.decodeHex().inputStream(), testnet = true)
+        transactionToSign.signInput(0, privateKey) shouldBe true
+//        transactionToSign.serialize().toHex() shouldBe SIGN_TRANSACTION_HEX
+        val transaction1 = Transaction.parse(SIGN_TRANSACTION_HEX.decodeHex().inputStream())
+        println(transaction1.id())
+        transaction1.verify() shouldBe true
     }
 })
 
@@ -87,6 +98,12 @@ private const val NO_SIGN_TRANSACTION_HEX =
     "010000000199a24308080ab26e6fb65c4eccfadf76749bb5bfa8cb08f291320b3c21e56f0d0d00000000ffffffff02408af701000000001976" +
             "a914d52ad7ca9b3d096a38e752c2018e6fbc40cdf26f88ac80969800000000001976a914507b27411ccf7f16f10297de6cef3f2916" +
             "23eddf88ac00000000"
+
+private const val SIGN_TRANSACTION_HEX = "010000000199a24308080ab26e6fb65c4eccfadf76749bb5bfa8cb08f291320b3c21e56f0d0d0" +
+        "000006b4830450221008ed46aa2cf12d6d81065bfabe903670165b538f65ee9a3385e6327d80c66d3b502203124f804410527497329ec4" +
+        "715e18558082d489b218677bd029e7fa306a72236012103935581e52c354cd2f484fe8ed83af7a3097005b2f9c60bff71d35bd795f54b6" +
+        "7ffffffff02408af701000000001976a914d52ad7ca9b3d096a38e752c2018e6fbc40cdf26f88ac80969800000000001976a914507b274" +
+        "11ccf7f16f10297de6cef3f291623eddf88ac00000000"
 
 private const val TRANSACTION_HEX =
     "0100000001813f79011acb80925dfe69b3def355fe914bd1d96a3f5f71bf8303c6a989c7d1000000006b483045022100e" +

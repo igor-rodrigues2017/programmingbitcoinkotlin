@@ -1061,3 +1061,168 @@ We also need a way to convert the **20-byte hash to a ScriptPubKey**.
 #### Signing the Transaction
 
 Signing the transaction could be tricky, but we know how to get the signature hash, z, from earlier in this chapter. If we have the private key whose public key hash160s to the 20-byte hash in the ScriptPubKey, we can sign z and produce the DER signature.
+
+## CHAPTER 8 - Pay-to-Script-Hash
+
+### Bare Multisig
+
+Bare multisig was the first attempt at creating transaction outputs that require signatures from multiple parties. The idea is to change from a single point of failure to something a little more resilient to hacks. To understand bare multisig, one must first understand the OP_CHECKMULTISIG opcode. The opcode consumes a lot of elements from the stack and returns whether or not the required
+number of signatures are valid for a transaction input.
+
+The transaction output is called “bare” multisig because it’s a long ScriptPubKey. 
+
+Shows what a ScriptPubKey for a 1-of-2 multisig looks like:
+
+<img src="images-readme/bare-multisig-scriptPubKey.png" height="300" />
+
+Among bare multisig ScriptPubKeys, this one is on the small end, and we can already see that it’s long. The ScriptPubKey for p2pkh is only 25 bytes, whereas this bare multisig is 101 bytes (though obviously, compressed SEC format would reduce it some), and this is a 1-of-2!
+
+Shows what the ScriptSig looks like:
+
+<img src="images-readme/bare-multisig-scriptSig.png" height="200" />
+
+We only need 1 signature for this 1-of-2 multisig, so this is relatively short; something like a 5-of-7 would require 5 DER signatures and would be a lot longer (360 bytes or so).
+
+Shows how the ScriptSig and ScriptPubKey combine:
+
+<img src="images-readme/bare-multisig-combined-script.png" height="350" />
+
+what an m-of-n bare multisig would look like (m and n can be anything from 1 to 20 inclusive, though the numerical opcodes only go up to OP_16; values of 17 to 20 would require 0112 to push a number like 18 to the stack).
+
+> **OP_CHECKMULTISIG Off-by-One Bug**
+> The stack elements consumed by OP_CHECKMULTISIG are supposed to be m, m different signatures, n and n different pubkeys. The number of elements consumed should be 2 (m and n themselves) + m (signatures) + n (pubkeys). Unfortunately, the opcode consumes one more element than the m + n + 2 elements that it’s supposed to. OP_CHECKMULTISIG consumes m + n + 3 elements, so an extra element is added (OP_0 in our example) so as to not cause a failure.
+> The opcode does nothing with that extra element, and that extra element can be anything. As a way to combat malleability, however, most nodes on the Bitcoin network will not relay the transaction unless the extra element is OP_0. Note that if we had m + n + 2 elements, OP_CHECKMULTISIG would fail as there are not enough elements to be consumed and the combined script would fail, causing the transaction to be invalid.
+
+### Problems with Bare Multisig
+
+Bare multisig is a bit ugly, but it is functional. However, bare multisig suffers from a few problems:
+
+```
+1. A bare multisig ScriptPubKey has many different public keys, and that makes the ScriptPubKey long. Unlike p2pkh or even p2pk ScriptPubKeys, these are not easily communicated using voice or even text messages.
+2. Because the output is so long—5 to 20 times larger than a normal p2pkh output — it requires more resources for node software. Nodes keep track of the UTXO set, and a big ScriptPubKey is more expensive to keep track of. A large output is more expensive to keep in fast-access storage (like RAM).
+3. Because the ScriptPubKey can be so big, bare multisig can and has been abused. The entire PDF of Satoshi’s original whitepaper is encoded in this transaction in block 230009:
+				54e48e5f5c656b26c3bca14a8c95aa583d07ebe84dde3b7dd4a78f4e4186e713
+```
+
+The creator of this transaction split up the whitepaper PDF into 64-byte chunks, which were then made into invalid uncompressed public keys. The whitepaper was encoded into 947 1-of-3 bare multisig outputs. These outputs are not spendable but have to be indexed in the UTXO sets of full nodes. This is a tax every full node has to pay and is in that sense abusive. 
+
+To mitigate these problems, pay-to-script-hash (p2sh) was born.
+
+### Pay-to-Script-Hash (p2sh)
+
+The solution that p2sh implements is to take the hash of some Script commands and then reveal the preimage Script commands later. Pay-to-script-hash was introduced in 2011 to a lot of controversy. There were multiple proposals, but as we’ll see, p2sh is
+kludgy but works. 
+
+In p2sh, a special rule gets executed only when the pattern shown is encountered:
+
+<img src="images-readme/pay-to-script-hash-pattern.png" height="150" />
+
+If this exact command set ends with a 1 on the stack, then the RedeemScript (the top item in Figure) is parsed and then added to the Script command set. This special pattern was introduced in BIP0016, and Bitcoin software that implements BIP0016 (anything post 2011) checks for the pattern. The RedeemScript does not add new Script commands for processing unless this exact sequence is encountered and ends with a 1.
+
+If this sounds hacky, it is. But before we get to that, let’s look a little more closely at exactly how this plays out.
+
+Let’s say we have a 2-of-2 multisig ScriptPubKey:
+
+<img src="images-readme/pay-to-script-hash-redeemScript.png" height="250" />
+
+This is a ScriptPubKey for a bare multisig. What we need to do to convert this to p2sh is to take a hash of this script and keep the script handy for when we want to redeem it. We call this the RedeemScript, because the script is only revealed during redemption. We put the hash of the RedeemScript as the ScriptPubKey.
+
+<img src="images-readme/pay-to-script-hash-scriptPubKey.png" height="150" />
+
+The hash digest here is the hash160 of the RedeemScript, or what was previously the ScriptPubKey. We’re locking the funds to the hash of the RedeemScript, which needs to be revealed at unlock time.
+
+Creating the ScriptSig for a p2sh script involves not only revealing the RedeemScript, but also unlocking the RedeemScript. At this point, you might be wondering where the RedeemScript is stored. It’s not on the blockchain until actual redemption, so it must be stored by the creator of the p2sh address. If the RedeemScript is lost and can not be reconstructed, the funds are lost, so it’s very important to keep track of it!
+
+> **Importance of Keeping the RedeemScript**
+> If you are receiving to a p2sh address, be sure to store and back up the RedeemScript! Better yet, make it easy to reconstruct!
+
+The ScriptSig for the 2-of-2 multisig looks like:
+
+<img src="images-readme/pay-to-script-hash-scriptSig.png" height="250" />
+
+This produces the combined script:
+
+<img src="images-readme/p2sh-combined-script.png" height="250" />
+
+As before, OP_0 is there because of the OP_CHECKMULTISIG bug.
+
+Upon execution of this sequence, if the stack is left with a 1, the RedeemScript is inserted into the Script command set. In other words, if we reveal a RedeemScript whose hash160 is the same as the hash160 in the ScriptPubKey, that RedeemScript
+acts like the ScriptPubKey instead. We hash the script that locks the funds and put that into the blockchain instead of the script itself. This is why we call this ScriptPubKey pay-to-script-hash.
+
+Let’s go through exactly how this works. We start with the Script commands:
+
+<img src="images-readme/p2sh-start.png" height="250" />
+
+OP_0 will push a 0 to the stack, and the two signatures and the RedeemScript will be pushed to the stack directly, leading to:
+
+<img src="images-readme/p2sh-step-1.png" height="250" />
+
+OP_HASH160 will hash the RedeemScript, which will make the stack look like:
+
+<img src="images-readme/p2sh-step-2.png" height="250" />
+
+The 20-byte hash will be pushed to the stack:
+
+<img src="images-readme/p2sh-step-3.png" height="250" />
+
+And finally, OP_EQUAL will compare the top two elements. If the software checking this transaction is pre-BIP0016, we will end up with:
+
+<img src="images-readme/p2sh-end-if-evaluating-with-pre-BIP0016-software.png" height="250" />
+
+This would end evaluation for pre-BIP0016 nodes and the result would be valid, assuming the hashes are equal.
+On the other hand, BIP0016 nodes, which as of this writing are the vast majority, will parse the RedeemScript as Script commands
+
+<img src="images-readme/p2sh-redeemScript.png" height="250" />
+
+These go into the Script column as commands:
+
+<img src="images-readme/p2sh-step-4.png" height="250" />
+
+OP_2 pushes a 2 to the stack, the pubkeys are also pushed, and a final OP_2 pushes another 2 to the stack:
+
+<img src="images-readme/p2sh-step-5.png" height="250" />
+
+OP_CHECKMULTISIG consumes m + n + 3 elements, which is the entire stack, and we end the same way we did for bare multisig:
+
+<img src="images-readme/p2sh-end-for-post-BIP0016-software.png" height="90" />
+
+### More Complicated Scripts
+
+The nice thing about p2sh is that the RedeemScript can be as long as the largest single element from OP_PUSHDATA2, which is 520 bytes. Multisig is just one possibility. You can have scripts that define more complicated logic, like “2 of 3 of these keys or 5 of 7 of these other keys.” The main feature of p2sh is that it’s flexible and at the same time reduces the UTXO set size by pushing the burden of storing part of the script back to the user.
+In Chapter 13, p2sh is also used to make Segwit backward compatible.
+
+### Addresses
+
+To compute p2sh addresses, we use a process similar to how we compute p2pkh addresses. The hash160 is prepended with a prefix byte and appended with a checksum.
+Mainnet p2sh uses the 0x05 byte, which causes addresses to start with a 3 in Base58, while testnet p2sh uses the 0xc4 byte to cause addresses to start with a 2.
+
+### p2sh Signature Verification
+
+As with p2pkh, one of the tricky aspects of p2sh is verifying the signatures. p2sh signature verification is different from the p2pkh process covered in Chapter 7.
+
+Unlike with p2pkh, where there’s only one signature and one public key, we have some number of pubkeys (in SEC format in the RedeemScript) and some equal or smaller number of signatures (in DER format in the ScriptSig). Thankfully, the signatures have to be in the same order as the pubkeys or the signatures are not considered valid.
+Once we have a particular signature and public key, we only need the signature hash, or z, to figure out whether the signature is valid:
+
+<img src="images-readme/validation-of-p2sh-inputs.png" height="200" />
+
+#### Step 1: Empty all the ScriptSigs
+
+<img src="images-readme/empty-each-input-scriptSig.png" height="100" />
+
+#### Step 2: Replace the ScriptSig of the p2sh input being signed with the RedeemScript
+
+Each p2sh input has a RedeemScript. We take the RedeemScript and put that in place of the empty ScriptSig. This is different from p2pkh in that it’s not the ScriptPubKey.
+
+<img src="images-readme/replace-the-scriptSig-of-the-input-checking-with-the-redeemScript.png" height="150" />
+
+#### Step 3: Append the hash type
+
+Last, we add a 4-byte hash type to the end. This is the same as in p2pkh. The integer corresponding to SIGHASH_ALL is 1 and this has to be encoded in little-endian over 4 bytes, which makes the transaction look like:
+
+<img src="images-readme/append-the-hash-type.png" height="150" />
+
+The hash256 of this interpreted as a big-endian integer is our z.
+
+Now that we have our z, we can grab the SEC public key and DER signature from the ScriptSig and RedeemScript:
+
+<img src="images-readme/DER-signature-and-SEC-pubkey-within-the-p2sh-scriptSig-and-redeemScript.png" height="220" />

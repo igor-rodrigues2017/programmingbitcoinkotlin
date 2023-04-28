@@ -3,15 +3,17 @@ package extension
 import org.bouncycastle.util.BigIntegers
 import java.io.ByteArrayInputStream
 import java.math.BigInteger
-import java.math.BigInteger.*
+import java.math.BigInteger.ONE
+import java.math.BigInteger.TWO
+import java.math.BigInteger.ZERO
 
 const val BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 val SIGHASH_ALL = ONE
 val SIGHASH_NONE = TWO
 val SIGHASH_SINGLE = 3.toBigInteger()
-const val VARINT_FD = 0xfd.toByte()
-const val VARINT_FE = 0xfe.toByte()
-const val VARINT_FF = 0xff.toByte()
+const val VARINT_FD = 0xfd
+const val VARINT_FE = 0xfe
+const val VARINT_FF = 0xff
 fun ByteArray.toHex() = this.joinToString("") { String.format("%02x", it) }
 
 fun ByteArray.encodeBase58(): String {
@@ -42,12 +44,22 @@ private fun ByteArray.countZerosBytes(): Int {
 
 fun ByteArray.encodeBase58CheckSum() = (this + hash256(this).copyOfRange(0, 4)).encodeBase58()
 
+fun h160ToP2pkhAddress(hash160: ByteArray, testnet: Boolean = false): String {
+    val prefix = if (testnet) byteArrayOf(0x6f) else byteArrayOf(0x00)
+    return (prefix + hash160).encodeBase58CheckSum()
+}
+
+fun h160ToP2shAddress(hash160: ByteArray, testnet: Boolean = false): String {
+    val prefix = if (testnet) byteArrayOf(0xc4.toByte()) else byteArrayOf(0x05)
+    return (prefix + hash160).encodeBase58CheckSum()
+}
+
 fun ByteArray.littleEndianToBigInteger(): BigInteger = BigIntegers.fromUnsignedByteArray(this.reversedArray())
 
 fun ByteArray.toBigInteger(): BigInteger = BigIntegers.fromUnsignedByteArray(this)
 
 fun ByteArrayInputStream.readVarint(): BigInteger {
-    return when (val bytePrefix = this.readNBytes(1).first()) {
+    return when (val bytePrefix = this.read()) {
         VARINT_FD -> this.readNBytes(2).littleEndianToBigInteger()
         VARINT_FE -> this.readNBytes(4).littleEndianToBigInteger()
         VARINT_FF -> this.readNBytes(8).littleEndianToBigInteger()

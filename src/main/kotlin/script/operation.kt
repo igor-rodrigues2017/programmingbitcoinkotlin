@@ -1,10 +1,19 @@
 package script
 
 import ellipticcurve.S256Point
-import extension.*
+import extension.hash160
+import extension.hash256
+import extension.negativeIndex
+import extension.negativeRangeIndex
+import extension.removeNegativeIndex
+import extension.sha1
+import extension.sha256
 import signature.Signature
 import java.math.BigInteger
-import java.math.BigInteger.*
+import java.math.BigInteger.ONE
+import java.math.BigInteger.TEN
+import java.math.BigInteger.TWO
+import java.math.BigInteger.ZERO
 import java.util.*
 import java.util.logging.Level
 import java.util.logging.Logger
@@ -478,16 +487,73 @@ fun opCheckSig(stack: Stack<ByteArray>, z: BigInteger): Boolean {
     return true
 }
 
+fun opCheckSigVerify(stack: Stack<ByteArray>, z: BigInteger) = opCheckSig(stack, z) && opVerify(stack)
+
+/**
+ * check m of n signatures
+ */
+fun opCheckMultiSig(stack: Stack<ByteArray>, z: BigInteger): Boolean {
+    if (stack.size < 1) return false
+
+    val n = decodeNum(stack.pop()).toInt()
+    if (stack.size < n + 1) return false
+    val secPubKeys = getPubKeysByteArray(n, stack)
+
+    val m = decodeNum(stack.pop()).toInt()
+    val dreSignatures = getDreSignaturesByteArray(m, stack)
+
+    takeCareOfTheOffByOneError(stack)
+
+    runCatching {
+        validMultSignatures(secPubKeys, dreSignatures, z, stack)
+    }.onFailure {
+        return false
+    }
+    return true
+}
+
+private fun validMultSignatures(
+    secPubKeys: List<ByteArray>,
+    dreSignatures: List<ByteArray>,
+    z: BigInteger,
+    stack: Stack<ByteArray>
+): Boolean {
+    val points = parseToS256Points(secPubKeys)
+    val sigs = parseToSignature(dreSignatures)
+    sigs.forEach { signature ->
+        if (points.size == 0) return false
+        while (points.isNotEmpty()) {
+            val point = points.removeFirst()
+            if (point.verify(z, signature)) break
+        }
+    }
+    return stack.add(encodeNum(ONE))
+}
+
+private fun getPubKeysByteArray(
+    n: Int,
+    stack: Stack<ByteArray>
+) = (1..n).fold(listOf<ByteArray>()) { acc, _ -> acc + stack.pop() }
+
+private fun getDreSignaturesByteArray(
+    m: Int,
+    stack: Stack<ByteArray>
+) = (1..m).fold(listOf<ByteArray>()) { acc, _ -> acc + getDreSignatureWithoutHashType(stack) }
+
 /**
  * take off the last byte of the signature as that's the hash_type
  */
 private fun getDreSignatureWithoutHashType(stack: Stack<ByteArray>) = stack.pop().dropLast(1).toByteArray()
 
-fun opCheckSigVerify(stack: Stack<ByteArray>, z: BigInteger) = opCheckSig(stack, z) && opVerify(stack)
-
-fun opCheckMultiSig(stack: Stack<ByteArray>, z: BigInteger): Boolean {
-    TODO("NOT IMPLEMENTED")
+private fun takeCareOfTheOffByOneError(stack: Stack<ByteArray>) {
+    stack.pop()
 }
+
+private fun parseToS256Points(secPubKeys: List<ByteArray>): Stack<S256Point> =
+    secPubKeys.map { S256Point.parse(it) }.let { Stack<S256Point>().apply { addAll(it) } }
+
+private fun parseToSignature(dreSignatures: List<ByteArray>): List<Signature> =
+    dreSignatures.map { Signature.parse(it) }
 
 fun opCheckMultiSigVerify(stack: Stack<ByteArray>, z: BigInteger) = opCheckMultiSig(stack, z) && opVerify(stack)
 

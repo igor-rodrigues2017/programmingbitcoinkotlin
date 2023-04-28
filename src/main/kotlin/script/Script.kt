@@ -1,5 +1,6 @@
 package script
 
+import extension.decodeBase58
 import extension.littleEndianToBigInteger
 import extension.readVarint
 import extension.toHex
@@ -18,7 +19,14 @@ private const val OP_HASH160 = 0xa9
 private const val OP_EQUALVERIFY = 0x88
 private const val OPCHECKSIG = 0xac
 
-fun p2pkhScriptPubkey(h160Pubkey: ByteArray) = Script(listOf(OP_DUP, OP_HASH160, h160Pubkey, OP_EQUALVERIFY, OPCHECKSIG))
+fun p2pkhScriptPubkey(address: String) =
+    Script(listOf(
+        OP_DUP,
+        OP_HASH160,
+        address.decodeBase58(),
+        OP_EQUALVERIFY,
+        OPCHECKSIG
+    ))
 
 fun p2pkhScriptSig(derSignature: ByteArray, secPublicKey: ByteArray) = Script(listOf(derSignature, secPublicKey))
 
@@ -126,22 +134,22 @@ class Script(val commands: List<Any> = listOf()) {
         val result = ByteArrayOutputStream()
         for (command in commands) {
             when (command) {
-                is Int -> result.write(toBytes(command, 1))
+                is Int -> result.write(toLittleEndianBytes(command, 1))
                 else -> {
                     val length = (command as ByteArray).size
                     when {
                         isElement(length) -> {
-                            result.write(toBytes(length, 1))
+                            result.write(toLittleEndianBytes(length, 1))
                         }
 
                         isPushData1(length) -> {
-                            result.write(toBytes(76, 1))
-                            result.write(toBytes(length, 1))
+                            result.write(toLittleEndianBytes(76, 1))
+                            result.write(toLittleEndianBytes(length, 1))
                         }
 
                         isPushData2(length) -> {
-                            result.write(toBytes(77, 1))
-                            result.write(toBytes(length, 2))
+                            result.write(toLittleEndianBytes(77, 1))
+                            result.write(toLittleEndianBytes(length, 2))
                         }
 
                         else -> throw IllegalArgumentException("too long an command")
@@ -153,7 +161,7 @@ class Script(val commands: List<Any> = listOf()) {
         return result.toByteArray()
     }
 
-    private fun toBytes(length: Int, arraySize: Int) = length.toBigInteger().toLittleEndianByteArray().copyOf(arraySize)
+    private fun toLittleEndianBytes(length: Int, arraySize: Int) = length.toBigInteger().toLittleEndianByteArray().copyOf(arraySize)
 
     private fun isElement(length: Int) = length < 75
 
@@ -170,7 +178,12 @@ class Script(val commands: List<Any> = listOf()) {
                 executeOperation(command, stack, commandsCopy, altStack, z).let { operation ->
                     if (isFail(operation)) return false
                 }
-            } else stack.add(command)
+            } else {
+                stack.add(command)
+                if (isP2shScriptPubkey(commandsCopy)) {
+                    processP2ShScript(commandsCopy, stack, command)
+                }
+            }
         }
         return isScriptSuccess(stack)
     }
@@ -249,6 +262,36 @@ class Script(val commands: List<Any> = listOf()) {
         }.getOrDefault(false)
     }
 
+    fun isP2shScriptPubkey(
+        commands: MutableList<Any> = this.commands.toMutableList()
+    ) = commands.size == 3 &&
+            commands[0] == 0xa9 &&
+            commands[1] is ByteArray &&
+            (commands[1] as ByteArray).size == 20 &&
+            commands[2] == 0x87
+
+    @Suppress("UNCHECKED_CAST")
+    private fun processP2ShScript(
+        commands: MutableList<Any>,
+        stack: Stack<Any>,
+        command: Any
+    ): Boolean {
+        commands.removeLast()
+        val h160 = commands.removeLast()
+        commands.removeLast()
+        opHash160(stack as Stack<ByteArray>).let { operation -> if (isFail(operation)) return false }
+        stack.add(h160)
+        opEqual(stack).let { operation -> if (isFail(operation)) return false }
+        opVerify(stack).let { operation ->
+            if (isFail(operation)) {
+                Logger.getAnonymousLogger().log(Level.INFO, "bad op p2sh h160")
+                return false
+            }
+        }
+        val redeemScript = (command as ByteArray).let { it.size.toBigInteger().toVarint() + it }
+        return commands.addAll(parse(redeemScript.inputStream()).commands)
+    }
+
     private fun isFail(resultOperation: Boolean) = !resultOperation
 
     private fun logError(command: Any?, exception: Throwable) {
@@ -262,11 +305,12 @@ class Script(val commands: List<Any> = listOf()) {
     override fun toString(): String {
         val result = mutableListOf<String>()
         commands.forEach { command ->
-            when(command) {
+            when (command) {
                 is Int -> {
                     val name = if (OP_CODE_NAMES.containsKey(command)) OP_CODE_NAMES[command] else "OP_[$command]"
                     result.add(name!!)
                 }
+
                 else -> result.add((command as ByteArray).toHex())
             }
         }

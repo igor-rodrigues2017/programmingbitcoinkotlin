@@ -36,7 +36,7 @@ class TransactionFetcher {
         private fun getTransactionHex(testnet: Boolean, transactionId: String): String =
             "${getBaseUrl(testnet)}/api/tx/$transactionId/hex".let { url ->
                 Logger.getAnonymousLogger().log(Level.INFO, "Request: $url")
-                url.httpGet().responseString().third.get()
+                url.httpGet().timeoutRead(10000).responseString().third.get()
             }
 
         private fun getBaseUrl(testnet: Boolean = false) = if (testnet) TEST_NET_URL else MAIN_NET_URL

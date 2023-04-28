@@ -51,10 +51,10 @@ fun BigInteger.toLittleEndianByteArray(): ByteArray = BigIntegers.asUnsignedByte
 
 fun BigInteger.toVarint(): ByteArray {
     return when {
-        this < 0xfd.toBigInteger() -> this.toByteArray()
-        this < 10_000.toBigInteger() -> byteArrayOf(VARINT_FD) + this.toLittleEndianByteArray()
-        this < 100_000_000.toBigInteger() -> byteArrayOf(VARINT_FE) + this.toLittleEndianByteArray()
-        this < 10_000_000_000_000_000.toBigInteger() -> byteArrayOf(VARINT_FF) + this.toLittleEndianByteArray()
+        this < 0xfd.toBigInteger() -> byteArrayOf(this.toByte())
+        this < 10_000.toBigInteger() -> byteArrayOf(VARINT_FD.toByte()) + this.toLittleEndianByteArray()
+        this < 100_000_000.toBigInteger() -> byteArrayOf(VARINT_FE.toByte()) + this.toLittleEndianByteArray()
+        this < 10_000_000_000_000_000.toBigInteger() -> byteArrayOf(VARINT_FF.toByte()) + this.toLittleEndianByteArray()
         else -> throw IllegalArgumentException("integer too large: $this")
     }
 }

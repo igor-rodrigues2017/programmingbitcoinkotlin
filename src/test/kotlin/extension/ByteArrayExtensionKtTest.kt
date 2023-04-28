@@ -53,4 +53,16 @@ class ByteArrayExtensionKtTest : StringSpec({
         }
     }
 
+    "should convert a 20-byte hash160 into p2pkh address" {
+        val h160 = "74d691da1574e6b3c192ecfb52cc8984ee7b6c56".decodeHex()
+        h160ToP2pkhAddress(h160, testnet = false) shouldBe "1BenRpVUFK65JFWcQSuHnJKzc4M8ZP8Eqa"
+        h160ToP2pkhAddress(h160, testnet = true) shouldBe "mrAjisaT4LXL5MzE81sfcDYKU3wqWSvf9q"
+    }
+
+    "should convert a 20-byte hash160 into p2sh address" {
+        val h160 = "74d691da1574e6b3c192ecfb52cc8984ee7b6c56".decodeHex()
+        h160ToP2shAddress(h160, testnet = false) shouldBe "3CLoMMyuoDQTPRD3XYZtCvgvkadrAdvdXh"
+        h160ToP2shAddress(h160, testnet = true) shouldBe "2N3u1R6uwQfuobCqbCgBkpsgBxvr1tZpe7B"
+    }
+
 })

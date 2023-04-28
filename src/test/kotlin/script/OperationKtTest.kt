@@ -1,6 +1,13 @@
 package script
 
-import extension.*
+import extension.decodeHex
+import extension.hash160
+import extension.hash256
+import extension.littleEndianToBigInteger
+import extension.sha1
+import extension.sha256
+import extension.toHex
+import extension.toLittleEndianByteArray
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import java.math.BigInteger.ONE
@@ -994,6 +1001,27 @@ class OperationKtTest : StringSpec({
 
         opCheckSig(stack, z) shouldBe true
         stack[0].littleEndianToBigInteger() shouldBe ONE
+    }
+
+    "should check mult signature" {
+        val z = "e71bfa115715d6fd33796948126f40a8cdd39f187e4afb03896795189fe1423c".toBigInteger(16)
+        val sig1 = ("3045022100dc92655fe37036f47756db8102e0d7d5e28b3beb83a8fef4f5dc0559bddfb94e02205a36d4e4e6c7fcd1" +
+                "6658c50783e00c341609977aed3ad00937bf4ee942a8993701").decodeHex()
+        val sig2 = ("3045022100da6bee3c93766232079a01639d07fa869598749729ae323eab8eef53577d611b02207bef15429dcadce2121" +
+                "ea07f233115c6f09034c0be68db99980b9a6c5e75402201").decodeHex()
+        val sec1 = "022626e955ea6ea6d98850c994f9107b036b1334f18ca8830bfff1295d21cfdb70".decodeHex()
+        val sec2 = "03b287eaf122eea69030a0e9feed096bed8045c8b98bec453e1ffac7fbdbd4bb71".decodeHex()
+        val stack = Stack<ByteArray>().apply {
+            this.add(byteArrayOf())
+            this.add(sig1)
+            this.add(sig2)
+            this.add(byteArrayOf(0x02))
+            this.add(sec1)
+            this.add(sec2)
+            this.add(byteArrayOf(0x02))
+        }
+        opCheckMultiSig(stack, z) shouldBe true
+        decodeNum(stack[0]) shouldBe ONE
     }
 
 })

@@ -55,14 +55,14 @@ data class Transaction(
 
     fun id() = hash().toHex()
 
-    fun fee(): BigInteger = inputs.sumOf { it.value() } - outputs.sumOf { it.amount }
+    fun fee(): BigInteger = inputs.sumOf { it.value(this.testnet) } - outputs.sumOf { it.amount }
 
     fun serialize() = serializeVersion() + serializeInputs() + serializeOutputs() + serializeLockTime()
 
-    fun sigHash(inputIndex: Int): BigInteger {
+    fun sigHash(inputIndex: Int, redeemScript: Script? = null): BigInteger {
         return hash256(
             serializeVersion() +
-                    serializeInputsForSigHash(inputIndex) +
+                    serializeInputsForSigHash(inputIndex, redeemScript) +
                     serializeOutputs() +
                     serializeLockTime() +
                     serializeHashType()
@@ -91,7 +91,13 @@ data class Transaction(
 
     fun verifyInput(inputIndex: Int): Boolean {
         return inputs[inputIndex].let { input ->
-            val z = sigHash(inputIndex)
+            val scriptPubkey = input.scriptPubkey(testnet)
+            val redeemScript = if (scriptPubkey.isP2shScriptPubkey()) {
+                val command = input.scriptSignature.commands.last() as ByteArray
+                val rawRedeem = command.size.toBigInteger().toVarint().let { it + command }
+                Script.parse(rawRedeem.inputStream())
+            } else null
+            val z = sigHash(inputIndex, redeemScript)
             combineSignatureAndPubkeyScripts(input).evaluate(z)
         }
     }
@@ -103,7 +109,7 @@ data class Transaction(
     fun verify(): Boolean {
         if (creatingMoney()) return false
         inputs.forEachIndexed { index, _ ->
-            if (isInvalidSignature(index)) return false
+            if (isInvalidInput(index)) return false
         }
         return true
     }
@@ -111,7 +117,7 @@ data class Transaction(
     private fun combineSignatureAndPubkeyScripts(input: TransactionInput) =
         input.scriptSignature + input.scriptPubkey(testnet)
 
-    private fun isInvalidSignature(index: Int) = !verifyInput(index)
+    private fun isInvalidInput(index: Int) = !verifyInput(index)
 
     private fun creatingMoney() = fee() < ZERO
 
@@ -120,31 +126,41 @@ data class Transaction(
      */
     private fun hash() = hash256(serialize()).reversedArray()
 
-    private fun serializeInputsForSigHash(inputIndex: Int): ByteArray {
-        return lengthInVarint(inputs) + modifySignatureInInputs(inputIndex)
+    private fun serializeInputsForSigHash(inputIndex: Int, redeemScript: Script? = null): ByteArray {
+        return lengthInVarint(inputs) + modifySignatureInInputs(inputIndex, redeemScript)
     }
 
-    private fun modifySignatureInInputs(inputIndex: Int) =
+    private fun modifySignatureInInputs(inputIndex: Int, redeemScript: Script? = null) =
         inputs.foldIndexed(byteArrayOf()) { index, acc, transactionInput ->
-            acc + newScriptSignature(index, inputIndex, transactionInput)
+            acc + newScriptSignature(index, inputIndex, transactionInput, redeemScript)
         }
 
     private fun newScriptSignature(
         index: Int,
         inputIndex: Int,
-        transactionInput: TransactionInput
+        transactionInput: TransactionInput,
+        redeemScript: Script? = null
     ) = if (index == inputIndex) {
-        exchangeScriptSignatureToScriptPubkey(transactionInput)
+        redeemScript?.let { script ->
+            exchangeScriptSignatureToRedeemScript(transactionInput, script)
+        } ?: exchangeScriptSignatureToScriptPubkey(transactionInput)
     } else {
         emptyScriptSignature(transactionInput)
     }
 
-    private fun emptyScriptSignature(transactionInput: TransactionInput) = transactionInput.copy(
-        scriptSignature = Script(),
+    private fun exchangeScriptSignatureToRedeemScript(
+        transactionInput: TransactionInput,
+        redeemScript: Script
+    ) = transactionInput.copy(
+        scriptSignature = redeemScript
     ).serialize()
 
     private fun exchangeScriptSignatureToScriptPubkey(transactionInput: TransactionInput) = transactionInput.copy(
         scriptSignature = transactionInput.scriptPubkey(testnet),
+    ).serialize()
+
+    private fun emptyScriptSignature(transactionInput: TransactionInput) = transactionInput.copy(
+        scriptSignature = Script(),
     ).serialize()
 
     private fun serializeVersion() = version.toLittleEndianByteArray().copyOf(4)
