@@ -84,10 +84,20 @@ class TransactionTest : StringSpec({
         val privateKey = PrivateKey(8675309.toBigInteger())
         val transactionToSign = Transaction.parse(NO_SIGN_TRANSACTION_HEX.decodeHex().inputStream(), testnet = true)
         transactionToSign.signInput(0, privateKey) shouldBe true
-//        transactionToSign.serialize().toHex() shouldBe SIGN_TRANSACTION_HEX
-        val transaction1 = Transaction.parse(SIGN_TRANSACTION_HEX.decodeHex().inputStream())
-        println(transaction1.id())
-        transaction1.verify() shouldBe true
+        transactionToSign.verify() shouldBe true
+    }
+
+    "should return if is a coinbase transaction" {
+        Transaction.parse(COINBASE_TRANSACTION.decodeHex().inputStream()).isCoinbase() shouldBe true
+        Transaction.parse(TRANSACTION_HEX.decodeHex().inputStream()).isCoinbase() shouldBe false
+    }
+
+    "should return the height block from coinbase transaction" {
+        Transaction.parse(COINBASE_TRANSACTION.decodeHex().inputStream()).coinbaseHeight() shouldBe 465879.toBigInteger()
+    }
+
+    "should return the height block equal -1 when the transaction is not a coinbase transaction" {
+        Transaction.parse(TRANSACTION_HEX.decodeHex().inputStream()).coinbaseHeight() shouldBe BigInteger.ONE.negate()
     }
 })
 
@@ -98,12 +108,6 @@ private const val NO_SIGN_TRANSACTION_HEX =
     "010000000199a24308080ab26e6fb65c4eccfadf76749bb5bfa8cb08f291320b3c21e56f0d0d00000000ffffffff02408af701000000001976" +
             "a914d52ad7ca9b3d096a38e752c2018e6fbc40cdf26f88ac80969800000000001976a914507b27411ccf7f16f10297de6cef3f2916" +
             "23eddf88ac00000000"
-
-private const val SIGN_TRANSACTION_HEX = "010000000199a24308080ab26e6fb65c4eccfadf76749bb5bfa8cb08f291320b3c21e56f0d0d0" +
-        "000006b4830450221008ed46aa2cf12d6d81065bfabe903670165b538f65ee9a3385e6327d80c66d3b502203124f804410527497329ec4" +
-        "715e18558082d489b218677bd029e7fa306a72236012103935581e52c354cd2f484fe8ed83af7a3097005b2f9c60bff71d35bd795f54b6" +
-        "7ffffffff02408af701000000001976a914d52ad7ca9b3d096a38e752c2018e6fbc40cdf26f88ac80969800000000001976a914507b274" +
-        "11ccf7f16f10297de6cef3f291623eddf88ac00000000"
 
 private const val TRANSACTION_HEX =
     "0100000001813f79011acb80925dfe69b3def355fe914bd1d96a3f5f71bf8303c6a989c7d1000000006b483045022100e" +

@@ -1,11 +1,6 @@
 package script
 
-import extension.decodeBase58
-import extension.littleEndianToBigInteger
-import extension.readVarint
-import extension.toHex
-import extension.toLittleEndianByteArray
-import extension.toVarint
+import extension.*
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.math.BigInteger
@@ -19,7 +14,7 @@ private const val OP_HASH160 = 0xa9
 private const val OP_EQUALVERIFY = 0x88
 private const val OPCHECKSIG = 0xac
 
-fun p2pkhScriptPubkey(address: String) =
+fun p2pkhScriptPubKey(address: String) =
     Script(listOf(
         OP_DUP,
         OP_HASH160,
@@ -62,7 +57,7 @@ class Script(val commands: List<Any> = listOf()) {
             return Script(commands)
         }
 
-        private fun getLength(stream: ByteArrayInputStream) = stream.readVarint().toInt()
+        private fun getLength(stream: ByteArrayInputStream) = stream.readVarInt().toInt()
 
         private fun isElement(currentByte: Byte) = currentByte >= 1.toByte() && currentByte <= 75.toByte()
 
@@ -126,7 +121,7 @@ class Script(val commands: List<Any> = listOf()) {
 
     fun serialize(): ByteArray {
         val result = rawSerialize()
-        val length = result.size.toBigInteger().toVarint()
+        val length = result.size.toBigInteger().toVarInt()
         return length + result
     }
 
@@ -288,7 +283,7 @@ class Script(val commands: List<Any> = listOf()) {
                 return false
             }
         }
-        val redeemScript = (command as ByteArray).let { it.size.toBigInteger().toVarint() + it }
+        val redeemScript = (command as ByteArray).let { it.size.toBigInteger().toVarInt() + it }
         return commands.addAll(parse(redeemScript.inputStream()).commands)
     }
 

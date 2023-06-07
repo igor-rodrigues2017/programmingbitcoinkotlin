@@ -1,13 +1,6 @@
 package transaction
 
-import extension.SIGHASH_ALL
-import extension.hash256
-import extension.littleEndianToBigInteger
-import extension.readVarint
-import extension.toBigInteger
-import extension.toHex
-import extension.toLittleEndianByteArray
-import extension.toVarint
+import extension.*
 import script.Script
 import script.p2pkhScriptSig
 import signature.PrivateKey
@@ -27,13 +20,13 @@ data class Transaction(
         fun parse(stream: ByteArrayInputStream, testnet: Boolean = false) = Transaction(
             version = stream.readNBytes(4).littleEndianToBigInteger(),
             inputs = parseInputs(stream),
-            outputs = paseOutPuts(stream),
+            outputs = parseOutPuts(stream),
             lockTime = stream.readNBytes(4).littleEndianToBigInteger(),
             testnet = testnet
         )
 
         private fun parseInputs(stream: ByteArrayInputStream): MutableList<TransactionInput> {
-            val numInputs = stream.readVarint()
+            val numInputs = stream.readVarInt()
             return mutableListOf<TransactionInput>().let { inputs ->
                 repeat(numInputs.toInt()) {
                     inputs += TransactionInput.parse(stream)
@@ -42,8 +35,8 @@ data class Transaction(
             }
         }
 
-        private fun paseOutPuts(stream: ByteArrayInputStream): List<TransactionOutput> {
-            val numOutputs = stream.readVarint()
+        private fun parseOutPuts(stream: ByteArrayInputStream): List<TransactionOutput> {
+            val numOutputs = stream.readVarInt()
             return mutableListOf<TransactionOutput>().let { outputs ->
                 repeat(numOutputs.toInt()) {
                     outputs += TransactionOutput.parse(stream)
@@ -91,16 +84,18 @@ data class Transaction(
 
     fun verifyInput(inputIndex: Int): Boolean {
         return inputs[inputIndex].let { input ->
-            val scriptPubkey = input.scriptPubkey(testnet)
-            val redeemScript = if (scriptPubkey.isP2shScriptPubkey()) {
-                val command = input.scriptSignature.commands.last() as ByteArray
-                val rawRedeem = command.size.toBigInteger().toVarint().let { it + command }
-                Script.parse(rawRedeem.inputStream())
-            } else null
-            val z = sigHash(inputIndex, redeemScript)
+            val scriptPubKey = input.scriptPubkey(testnet)
+            val z = sigHash(inputIndex, getRedeemScript(scriptPubKey, input))
             combineSignatureAndPubkeyScripts(input).evaluate(z)
         }
     }
+
+    private fun getRedeemScript(scriptPubkey: Script, input: TransactionInput) =
+        if (scriptPubkey.isP2shScriptPubkey()) {
+            val command = input.scriptSignature.commands.last() as ByteArray
+            val rawRedeem = command.size.toBigInteger().toVarInt().let { it + command }
+            Script.parse(rawRedeem.inputStream())
+        } else null
 
     /**
      * Note that a full node would verify more things, like checking for double-spends and
@@ -127,7 +122,7 @@ data class Transaction(
     private fun hash() = hash256(serialize()).reversedArray()
 
     private fun serializeInputsForSigHash(inputIndex: Int, redeemScript: Script? = null): ByteArray {
-        return lengthInVarint(inputs) + modifySignatureInInputs(inputIndex, redeemScript)
+        return lengthInVarInt(inputs) + modifySignatureInInputs(inputIndex, redeemScript)
     }
 
     private fun modifySignatureInInputs(inputIndex: Int, redeemScript: Script? = null) =
@@ -165,15 +160,15 @@ data class Transaction(
 
     private fun serializeVersion() = version.toLittleEndianByteArray().copyOf(4)
 
-    private fun serializeInputs() = lengthInVarint(inputs) +
+    private fun serializeInputs() = lengthInVarInt(inputs) +
             inputs.fold(byteArrayOf()) { acc, transaction -> acc + transaction.serialize() }
 
-    private fun serializeOutputs() = lengthInVarint(outputs) +
+    private fun serializeOutputs() = lengthInVarInt(outputs) +
             outputs.fold(byteArrayOf()) { acc, transaction -> acc + transaction.serialize() }
 
     private fun serializeLockTime() = lockTime.toLittleEndianByteArray().copyOf(4)
 
-    private fun lengthInVarint(transactionInputs: List<Any>) = transactionInputs.size.toBigInteger().toVarint()
+    private fun lengthInVarInt(transactionInputs: List<Any>) = transactionInputs.size.toBigInteger().toVarInt()
 
     private fun serializeHashType() = SIGHASH_ALL.toLittleEndianByteArray().copyOf(4)
 

@@ -49,7 +49,7 @@ fun BigInteger.to25ByteArray(): ByteArray = BigIntegers.asUnsignedByteArray(25, 
 
 fun BigInteger.toLittleEndianByteArray(): ByteArray = BigIntegers.asUnsignedByteArray(this).reversedArray()
 
-fun BigInteger.toVarint(): ByteArray {
+fun BigInteger.toVarInt(): ByteArray {
     return when {
         this < 0xfd.toBigInteger() -> byteArrayOf(this.toByte())
         this < 10_000.toBigInteger() -> byteArrayOf(VARINT_FD.toByte()) + this.toLittleEndianByteArray()

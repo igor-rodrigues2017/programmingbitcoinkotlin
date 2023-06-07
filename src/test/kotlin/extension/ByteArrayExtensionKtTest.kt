@@ -49,7 +49,7 @@ class ByteArrayExtensionKtTest : StringSpec({
                 "ff6dc7ed3e601000".decodeHex().inputStream(), 18_005_558_675_309.toBigInteger()
             )
         ) { inputStream, numberExpected ->
-            inputStream.readVarint() shouldBe numberExpected
+            inputStream.readVarInt() shouldBe numberExpected
         }
     }
 

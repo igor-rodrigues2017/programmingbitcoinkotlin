@@ -19,7 +19,7 @@ class BigIntegerExtensionKtTest : StringSpec({
                 18_005_558_675_309.toBigInteger(), "ff6dc7ed3e6010".decodeHex()
             )
         ) { number, byteArray ->
-            number.toVarint() shouldBe byteArray
+            number.toVarInt() shouldBe byteArray
         }
     }
 })

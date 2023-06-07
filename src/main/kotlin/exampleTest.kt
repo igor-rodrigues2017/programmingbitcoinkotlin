@@ -1,14 +1,8 @@
+
 import ellipticcurve.S256Point
-import extension.SIGHASH_ALL
-import extension.decodeHex
-import extension.hash256
-import extension.toBigInteger
-import extension.toHex
-import extension.toHex64
-import extension.toLittleEndianByteArray
-import extension.toVarint
+import extension.*
 import script.Script
-import script.p2pkhScriptPubkey
+import script.p2pkhScriptPubKey
 import signature.PrivateKey
 import signature.Signature
 import transaction.Transaction
@@ -32,12 +26,12 @@ fun testTransaction() {
 
     val change = TransactionOutput(
         amount = 2000000.toBigInteger(),
-        scriptPubKey = p2pkhScriptPubkey(changeAddress)
+        scriptPubKey = p2pkhScriptPubKey(changeAddress)
     )
 
     val target = TransactionOutput(
         amount = 961000.toBigInteger(),
-        scriptPubKey = p2pkhScriptPubkey(targetAddress)
+        scriptPubKey = p2pkhScriptPubKey(targetAddress)
     )
 
     val transaction = Transaction(
@@ -86,7 +80,7 @@ fun testP2SHExample() {
 
     val i = transaction.inputs[0]
     val s = transaction.version.toLittleEndianByteArray().copyOf(4).let {
-        it + transaction.inputs.size.toBigInteger().toVarint()
+        it + transaction.inputs.size.toBigInteger().toVarInt()
     }.let {
         it + TransactionInput(
             previousIndex = i.previousIndex,
@@ -95,7 +89,7 @@ fun testP2SHExample() {
             sequence = i.sequence
         ).serialize()
     }.let {
-        it + transaction.outputs.size.toBigInteger().toVarint()
+        it + transaction.outputs.size.toBigInteger().toVarInt()
     }.let {
         it + transaction.outputs.fold(byteArrayOf()) { acc, transactionOutput -> acc + transactionOutput.serialize() }
     }.let {

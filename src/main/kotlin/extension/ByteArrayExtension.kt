@@ -3,9 +3,7 @@ package extension
 import org.bouncycastle.util.BigIntegers
 import java.io.ByteArrayInputStream
 import java.math.BigInteger
-import java.math.BigInteger.ONE
-import java.math.BigInteger.TWO
-import java.math.BigInteger.ZERO
+import java.math.BigInteger.*
 
 const val BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 val SIGHASH_ALL = ONE
@@ -58,7 +56,7 @@ fun ByteArray.littleEndianToBigInteger(): BigInteger = BigIntegers.fromUnsignedB
 
 fun ByteArray.toBigInteger(): BigInteger = BigIntegers.fromUnsignedByteArray(this)
 
-fun ByteArrayInputStream.readVarint(): BigInteger {
+fun ByteArrayInputStream.readVarInt(): BigInteger {
     return when (val bytePrefix = this.read()) {
         VARINT_FD -> this.readNBytes(2).littleEndianToBigInteger()
         VARINT_FE -> this.readNBytes(4).littleEndianToBigInteger()

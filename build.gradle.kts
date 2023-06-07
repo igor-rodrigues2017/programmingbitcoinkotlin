@@ -14,13 +14,13 @@ repositories {
 
 dependencies {
     implementation("com.google.guava:guava:31.1-jre")
-    implementation("org.bouncycastle:bcprov-jdk15on:1.69")
+    implementation("org.bouncycastle:bcprov-jdk15on:1.70")
     implementation("com.github.kittinunf.fuel:fuel:2.3.1")
 
-    testImplementation(kotlin("test"))
-    testImplementation("io.kotest:kotest-runner-junit5-jvm:4.6.0")
+    testImplementation("org.jetbrains.kotlin:kotlin-test:1.8.20-RC")
+    testImplementation("io.kotest:kotest-runner-junit5-jvm:5.5.5")
     testImplementation("io.mockk:mockk:1.13.4")
-    implementation(kotlin("reflect"))
+    implementation("org.jetbrains.kotlin:kotlin-reflect:1.8.20-RC")
 
 }
 
